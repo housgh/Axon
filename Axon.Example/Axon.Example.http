@@ -1,0 +1,6 @@
+@Axon.Example_HostAddress = http://localhost:5131
+
+GET {{Axon.Example_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
