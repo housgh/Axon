@@ -17,6 +17,6 @@ public static class DependencyInjection
             .Build();
 
         services.AddSingleton(connection);
-        services.AddScoped<IAxonClient, AxonClient>();
+        services.AddSingleton<IAxonClient, AxonClient>();
     }
 }

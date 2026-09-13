@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Job Details — Axon Dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f1f4;
+    --border: #e2e4e9;
+    --text: #1a1d23;
+    --text-muted: #6b7280;
+    --text-faint: #9aa0ab;
+    --accent: #4f5fe0;
+    --accent-hover: #3f4dc9;
+    --danger: #d64545;
+    --danger-soft: #fbeaea;
+    --success: #1f9d55;
+    --success-soft: #e8f7ee;
+    --warning: #b5790a;
+    --warning-soft: #fcf1dc;
+    --info: #2f7dd6;
+    --info-soft: #e9f2fd;
+    --neutral: #6b7280;
+    --neutral-soft: #eef0f2;
+    --shadow: 0 1px 2px rgba(16,18,24,0.04), 0 8px 24px rgba(16,18,24,0.06);
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b;
+      --surface: #1b1e25;
+      --surface-2: #22252d;
+      --border: #2c303a;
+      --text: #eef0f3;
+      --text-muted: #9aa1ad;
+      --text-faint: #6b7280;
+      --accent: #7c88f0;
+      --accent-hover: #929cf3;
+      --danger: #f0716f;
+      --danger-soft: #3a2226;
+      --success: #4cca85;
+      --success-soft: #1c3327;
+      --warning: #e0ac4c;
+      --warning-soft: #3a2f18;
+      --info: #6ab0f5;
+      --info-soft: #1e2c3d;
+      --neutral: #9aa1ad;
+      --neutral-soft: #262931;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .wrap { max-width: 780px; margin: 0 auto; padding: 24px 20px 64px; }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  .back-link:hover { color: var(--text); }
+
+  header.job-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  header.job-head h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  header.job-head .sub { font-size: 13px; color: var(--text-muted); }
+
+  .actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 550;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--surface-2); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.danger-ghost { color: var(--danger); }
+  button.danger-ghost:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    padding: 18px 20px;
+  }
+  .panel h2 { font-size: 13px; margin: 0 0 14px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 11px 14px;
+    font-size: 13px;
+  }
+  .detail-grid dt { color: var(--text-muted); font-weight: 550; }
+  .detail-grid dd { margin: 0; word-break: break-word; }
+
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 620;
+    padding: 3px 9px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .badge.enqueued { background: var(--info-soft); color: var(--info); }
+  .badge.scheduled { background: var(--neutral-soft); color: var(--neutral); }
+  .badge.processing { background: var(--warning-soft); color: var(--warning); }
+  .badge.succeeded { background: var(--success-soft); color: var(--success); }
+  .badge.failed { background: var(--danger-soft); color: var(--danger); }
+
+  .args-box {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    max-height: 240px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .summary-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    border: 1px solid var(--danger);
+    background: var(--danger-soft);
+  }
+  .summary-banner .icon { font-size: 18px; line-height: 1; flex-shrink: 0; margin-top: 1px; }
+  .summary-banner .body { flex: 1; min-width: 0; }
+  .summary-banner .headline { font-weight: 620; color: var(--danger); font-size: 13.5px; margin-bottom: 4px; }
+  .summary-banner .message {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 4.5em;
+    overflow: hidden;
+  }
+  .summary-banner .message.expanded { max-height: none; }
+  .summary-banner .banner-actions { display: flex; gap: 6px; margin-top: 8px; }
+  .summary-banner .banner-actions button {
+    font-size: 12px;
+    padding: 4px 10px;
+    background: var(--surface);
+  }
+
+  .timeline { list-style: none; margin: 0; padding: 0; }
+  .timeline > li {
+    position: relative;
+    padding: 0 0 14px 26px;
+    border-left: 2px solid var(--border);
+    margin-left: 6px;
+  }
+  .timeline > li:last-child { border-color: transparent; padding-bottom: 0; }
+  .timeline .dot {
+    position: absolute;
+    left: -7px;
+    top: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--surface);
+  }
+  .timeline .dot.enqueued { background: var(--info); }
+  .timeline .dot.scheduled { background: var(--neutral); }
+  .timeline .dot.processing { background: var(--warning); }
+  .timeline .dot.succeeded { background: var(--success); }
+  .timeline .dot.failed { background: var(--danger); }
+  .timeline .row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; flex-wrap: wrap; }
+  .timeline .time { font-size: 12px; color: var(--text-faint); }
+
+  .note-toggle { margin-top: 2px; }
+  .note-toggle > summary {
+    list-style: none;
+    cursor: pointer;
+    font-size: 12.5px;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .note-toggle > summary::-webkit-details-marker { display: none; }
+  .note-toggle > summary::before {
+    content: '▸';
+    font-size: 10px;
+    color: var(--text-faint);
+    transition: transform 0.1s;
+    flex-shrink: 0;
+  }
+  .note-toggle[open] > summary::before { transform: rotate(90deg); }
+  .note-toggle > summary:hover { color: var(--text); }
+  .note-toggle .note-body {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-top: 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 260px;
+    overflow: auto;
+  }
+  .note-plain { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Attempt group: a collapsed retry cycle (dispatch -> failure -> backoff) */
+  .attempt-group > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .attempt-group > summary::-webkit-details-marker { display: none; }
+  .attempt-group > summary::before {
+    content: '▸';
+    font-size: 10px;
+    color: var(--text-faint);
+    transition: transform 0.1s;
+    flex-shrink: 0;
+  }
+  .attempt-group[open] > summary::before { transform: rotate(90deg); }
+  .attempt-group > summary:hover .attempt-label { color: var(--text); }
+  .attempt-label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+  .attempt-group .sub-timeline {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0 0 0 18px;
+    border-left: 2px dashed var(--border);
+  }
+  .attempt-group .sub-timeline li {
+    position: relative;
+    padding: 0 0 12px 20px;
+  }
+  .attempt-group .sub-timeline li:last-child { padding-bottom: 0; }
+  .attempt-group .sub-timeline .dot {
+    position: absolute;
+    left: -9px;
+    top: 2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--surface);
+  }
+
+  .empty { padding: 24px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+  .loading, .error-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .error-state { color: var(--danger); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="back-link" href="/axon/dashboard">&larr; Back to dashboard</a>
+
+  <div id="content">
+    <div class="loading">Loading job…</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const jobId = window.location.pathname.split('/').filter(Boolean)[2];
+  const content = document.getElementById('content');
+
+  const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed'];
+  const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed'];
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function ticksToDate(ticks) {
+    if (ticks === null || ticks === undefined) return null;
+    const ticksSinceEpoch = ticks - 621355968000000000;
+    return new Date(ticksSinceEpoch / 10000);
+  }
+
+  function fmtDate(ticks) {
+    const d = ticksToDate(ticks);
+    if (!d) return '—';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function relativeTime(ticks) {
+    const d = ticksToDate(ticks);
+    if (!d) return '';
+    const diffMs = d.getTime() - Date.now();
+    const abs = Math.abs(diffMs);
+    const mins = Math.round(abs / 60000);
+    let label;
+    if (mins < 1) label = 'moments';
+    else if (mins < 60) label = mins + 'm';
+    else if (mins < 1440) label = Math.round(mins / 60) + 'h';
+    else label = Math.round(mins / 1440) + 'd';
+    return diffMs < 0 ? label + ' ago' : 'in ' + label;
+  }
+
+  async function apiFetch(url, options) {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      window.location.href = '/axon/login?returnUrl=' + encodeURIComponent(window.location.pathname);
+      throw new Error('Not authenticated');
+    }
+    if (!res.ok && res.status !== 204) {
+      throw new Error('Request failed (' + res.status + ')');
+    }
+    return res;
+  }
+
+  const LONG_NOTE_THRESHOLD = 80;
+  const STATE = { ENQUEUED: 0, SCHEDULED: 1, PROCESSING: 2, SUCCEEDED: 3, FAILED: 4 };
+
+  function firstLine(text) {
+    const idx = text.indexOf('\n');
+    return idx === -1 ? text : text.slice(0, idx);
+  }
+
+  function renderNote(note, autoOpen) {
+    if (!note) return '';
+    if (note.length > LONG_NOTE_THRESHOLD || note.indexOf('\n') !== -1) {
+      return '<details class="note-toggle"' + (autoOpen ? ' open' : '') + '>' +
+        '<summary>' + escapeHtml(firstLine(note)) + '</summary>' +
+        '<div class="note-body">' + escapeHtml(note) + '</div>' +
+      '</details>';
+    }
+    return '<div class="note-plain">' + escapeHtml(note) + '</div>';
+  }
+
+  function renderEventRow(h, autoOpenNote) {
+    return '<div class="row">' +
+        '<span class="badge ' + STATE_CLASSES[h.state] + '">' + STATE_NAMES[h.state] + '</span>' +
+        '<span class="time" title="' + fmtDate(h.timestamp) + '">' + relativeTime(h.timestamp) + '</span>' +
+      '</div>' +
+      renderNote(h.note, autoOpenNote);
+  }
+
+  // Groups the flat history log into retry "attempts": each Processing event through
+  // its matching Failed (and the Scheduled retry note that follows, if any) becomes one
+  // collapsed unit. Everything else (the initial Enqueued, a terminal Succeeded/Failed
+  // with no further retry) stays as a standalone timeline entry.
+  function groupHistoryIntoAttempts(history) {
+    const items = [];
+    let i = 0;
+
+    while (i < history.length) {
+      const entry = history[i];
+
+      if (entry.state === STATE.PROCESSING && i + 1 < history.length && history[i + 1].state === STATE.FAILED) {
+        const events = [entry, history[i + 1]];
+        let next = i + 2;
+        if (next < history.length && history[next].state === STATE.SCHEDULED) {
+          events.push(history[next]);
+          next += 1;
+        }
+        items.push({ type: 'attempt', events });
+        i = next;
+      } else {
+        items.push({ type: 'single', event: entry });
+        i += 1;
+      }
+    }
+
+    return items;
+  }
+
+  function renderAttemptGroup(events, attemptNumber, totalAttempts, isLastGroup) {
+    const failure = events.find(function (e) { return e.state === STATE.FAILED; });
+    const summaryLine =
+      '<span class="attempt-label">Attempt ' + attemptNumber + ' of ' + totalAttempts + '</span>' +
+      '<span class="badge ' + STATE_CLASSES[failure.state] + '">' + STATE_NAMES[failure.state] + '</span>' +
+      '<span class="time" title="' + fmtDate(failure.timestamp) + '">' + relativeTime(failure.timestamp) + '</span>';
+
+    const subEvents = events.map(function (e, idx) {
+      const isFailureRow = e === failure;
+      return '<li>' +
+        '<span class="dot ' + STATE_CLASSES[e.state] + '"></span>' +
+        renderEventRow(e, isFailureRow && isLastGroup) +
+      '</li>';
+    }).join('');
+
+    return '<li>' +
+      '<span class="dot failed"></span>' +
+      '<details class="attempt-group"' + (isLastGroup ? ' open' : '') + '>' +
+        '<summary>' + summaryLine + '</summary>' +
+        '<ul class="sub-timeline">' + subEvents + '</ul>' +
+      '</details>' +
+    '</li>';
+  }
+
+  function renderHistory(history) {
+    if (!history.length) return '<div class="empty">No history recorded yet.</div>';
+
+    const items = groupHistoryIntoAttempts(history);
+    const attemptGroups = items.filter(function (it) { return it.type === 'attempt'; });
+    let attemptIndex = 0;
+
+    const html = items.map(function (item, idx) {
+      const isLastItem = idx === items.length - 1;
+
+      if (item.type === 'single') {
+        return '<li>' +
+          '<span class="dot ' + STATE_CLASSES[item.event.state] + '"></span>' +
+          renderEventRow(item.event, isLastItem) +
+        '</li>';
+      }
+
+      attemptIndex += 1;
+      const isLastGroup = item === attemptGroups[attemptGroups.length - 1];
+      return renderAttemptGroup(item.events, attemptIndex, attemptGroups.length, isLastGroup);
+    }).join('');
+
+    return '<ul class="timeline">' + html + '</ul>';
+  }
+
+  function buildSummaryBanner(job, history) {
+    if (job.state !== 4) return { html: '', fullTrace: '' };
+
+    const lastFailure = [...history].reverse().find(function (h) { return h.state === 4 && h.note; });
+    const message = lastFailure ? firstLine(lastFailure.note) : 'No error details were recorded.';
+    const fullTrace = lastFailure ? lastFailure.note : '';
+    // Reaching a terminal Failed state always means every attempt was used (see
+    // AxonJobService.MarkFailedAsync); job.attempts counts completed retries, so the
+    // actual number of dispatch attempts made is one more than that.
+    const attemptsMade = job.attempts + 1;
+    const headline = 'Failed after ' + attemptsMade + ' attempt' + (attemptsMade === 1 ? '' : 's');
+
+    const html = '<div class="summary-banner">' +
+      '<span class="icon">⚠️</span>' +
+      '<div class="body">' +
+        '<div class="headline">' + escapeHtml(headline) + '</div>' +
+        '<div class="message" id="summaryMessage">' + escapeHtml(message) + '</div>' +
+        '<div class="banner-actions">' +
+          (fullTrace && fullTrace.length > message.length ? '<button id="toggleFullTrace">Show full trace</button>' : '') +
+          (fullTrace ? '<button id="copyTraceBtn">Copy trace</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+    return { html, fullTrace, message };
+  }
+
+  function render(job, history) {
+    let argsText;
+    try {
+      argsText = JSON.stringify(job.arguments, null, 2);
+    } catch (e) {
+      argsText = String(job.arguments);
+    }
+
+    const historyHtml = renderHistory(history);
+    const summary = buildSummaryBanner(job, history);
+
+    content.innerHTML =
+      '<header class="job-head">' +
+        '<div>' +
+          '<h1>' + escapeHtml(job.methodName) + '</h1>' +
+          '<div class="sub">' + escapeHtml(job.declaringType) + '</div>' +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="danger-ghost" id="deleteBtn">Delete</button>' +
+          '<button class="primary" id="requeueBtn">Requeue</button>' +
+        '</div>' +
+      '</header>' +
+
+      summary.html +
+
+      '<div class="panel">' +
+        '<h2>Details</h2>' +
+        '<dl class="detail-grid">' +
+          '<dt>Job ID</dt><dd class="mono">' + escapeHtml(job.jobId) + '</dd>' +
+          '<dt>State</dt><dd><span class="badge ' + STATE_CLASSES[job.state] + '">' + STATE_NAMES[job.state] + '</span></dd>' +
+          '<dt>Device</dt><dd class="mono">' + escapeHtml(job.deviceName) + '</dd>' +
+          '<dt>Attempts</dt><dd>' + job.attempts + ' / ' + job.maxAttempts + '</dd>' +
+          '<dt>Scheduled for</dt><dd>' + (job.scheduledFor ? fmtDate(job.scheduledFor) + ' (' + relativeTime(job.scheduledFor) + ')' : '—') + '</dd>' +
+          '<dt>Assembly</dt><dd class="mono">' + escapeHtml(job.assembly) + '</dd>' +
+        '</dl>' +
+      '</div>' +
+
+      '<div class="panel">' +
+        '<h2>Arguments</h2>' +
+        '<div class="args-box">' + escapeHtml(argsText) + '</div>' +
+      '</div>' +
+
+      '<div class="panel">' +
+        '<h2>History</h2>' +
+        historyHtml +
+      '</div>';
+
+    document.getElementById('requeueBtn').addEventListener('click', async function () {
+      const btn = this;
+      btn.disabled = true;
+      btn.textContent = 'Requeuing…';
+      try {
+        await apiFetch('/axon/jobs/' + encodeURIComponent(job.jobId) + '/retry', { method: 'POST' });
+        await load();
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Requeue';
+      }
+    });
+
+    document.getElementById('deleteBtn').addEventListener('click', async function () {
+      if (!window.confirm('Delete this job? This cannot be undone.')) return;
+      const btn = this;
+      btn.disabled = true;
+      try {
+        await apiFetch('/axon/jobs/' + encodeURIComponent(job.jobId), { method: 'DELETE' });
+        window.location.href = '/axon/dashboard';
+      } catch (e) {
+        btn.disabled = false;
+      }
+    });
+
+    const toggleFullTraceBtn = document.getElementById('toggleFullTrace');
+    if (toggleFullTraceBtn) {
+      toggleFullTraceBtn.addEventListener('click', function () {
+        const el = document.getElementById('summaryMessage');
+        const expanded = el.classList.toggle('expanded');
+        el.textContent = expanded ? summary.fullTrace : summary.message;
+        toggleFullTraceBtn.textContent = expanded ? 'Show less' : 'Show full trace';
+      });
+    }
+
+    const copyTraceBtn = document.getElementById('copyTraceBtn');
+    if (copyTraceBtn) {
+      copyTraceBtn.addEventListener('click', async function () {
+        const original = copyTraceBtn.textContent;
+        const timedOut = new Promise(function (_, reject) {
+          setTimeout(function () { reject(new Error('timeout')); }, 3000);
+        });
+        try {
+          await Promise.race([navigator.clipboard.writeText(summary.fullTrace), timedOut]);
+          copyTraceBtn.textContent = 'Copied!';
+        } catch (e) {
+          copyTraceBtn.textContent = 'Could not copy';
+        }
+        setTimeout(function () { copyTraceBtn.textContent = original; }, 1500);
+      });
+    }
+  }
+
+  async function load() {
+    try {
+      const [jobRes, historyRes] = await Promise.all([
+        apiFetch('/axon/jobs/' + encodeURIComponent(jobId)),
+        apiFetch('/axon/jobs/' + encodeURIComponent(jobId) + '/history')
+      ]);
+
+      if (jobRes.status === 404) {
+        content.innerHTML = '<div class="error-state">This job no longer exists.</div>';
+        return;
+      }
+
+      const job = await jobRes.json();
+      const history = await historyRes.json();
+      render(job, history);
+    } catch (e) {
+      content.innerHTML = '<div class="error-state">Could not load this job.</div>';
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

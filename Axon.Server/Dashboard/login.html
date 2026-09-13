@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Axon Dashboard — Sign in</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --border: #e2e4e9;
+    --text: #1a1d23;
+    --text-muted: #6b7280;
+    --accent: #4f5fe0;
+    --accent-hover: #3f4dc9;
+    --danger: #d64545;
+    --danger-soft: #fbeaea;
+    --shadow: 0 1px 2px rgba(16,18,24,0.04), 0 8px 24px rgba(16,18,24,0.06);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b;
+      --surface: #1b1e25;
+      --border: #2c303a;
+      --text: #eef0f3;
+      --text-muted: #9aa1ad;
+      --accent: #7c88f0;
+      --accent-hover: #929cf3;
+      --danger: #f0716f;
+      --danger-soft: #3a2226;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 28px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), #8f6ff0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .brand h1 { font-size: 16px; font-weight: 650; margin: 0; }
+  .brand .sub { font-size: 12px; color: var(--text-muted); }
+  label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  input[type="password"] {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  input[type="password"]:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  button {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+  }
+  button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .error {
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 12.5px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin-bottom: 14px;
+  }
+  .error[hidden] { display: none; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="mark">A</div>
+      <div>
+        <h1>Axon Dashboard</h1>
+        <div class="sub">Sign in to continue</div>
+      </div>
+    </div>
+    <div class="error" id="error" hidden>Incorrect password.</div>
+    <form id="loginForm">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" autofocus />
+      <button type="submit" id="submitBtn">Sign in</button>
+    </form>
+  </div>
+
+  <script>
+  (function () {
+    var form = document.getElementById('loginForm');
+    var errorEl = document.getElementById('error');
+    var submitBtn = document.getElementById('submitBtn');
+    var params = new URLSearchParams(window.location.search);
+    var returnTo = params.get('returnUrl') || '/axon/dashboard';
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      errorEl.hidden = true;
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Signing in…';
+
+      try {
+        var res = await fetch('/axon/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: document.getElementById('password').value })
+        });
+
+        if (res.ok) {
+          window.location.href = returnTo;
+          return;
+        }
+
+        errorEl.hidden = false;
+      } catch (err) {
+        errorEl.textContent = 'Could not reach the server.';
+        errorEl.hidden = false;
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign in';
+    });
+  })();
+  </script>
+</body>
+</html>

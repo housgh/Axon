@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore Axon.sln
+
+      - name: Build
+        run: dotnet build Axon.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Axon.sln -c Release --no-build
+
+      - name: Verify packages build
+        run: dotnet pack Axon.sln -c Release --no-build -p:Version=0.0.0-ci -o ./artifacts

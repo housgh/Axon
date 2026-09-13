@@ -4,19 +4,21 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <RootNamespace>Axon.SqlServer</RootNamespace>
     </PropertyGroup>
 
     <PropertyGroup>
-        <PackageId>Axon.Client</PackageId>
-        <Description>Client library for Axon: enqueue one-off and recurring jobs, and execute jobs dispatched back to this service.</Description>
+        <PackageId>Axon.Store.SqlServer</PackageId>
+        <Description>SQL Server-backed job storage for Axon.Server.</Description>
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.19" />
+      <PackageReference Include="Dapper" Version="2.1.66" />
+      <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.1" />
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Axon.Core\Axon.Core.csproj" />
+      <ProjectReference Include="..\Axon.Server\Axon.Server.csproj" />
     </ItemGroup>
 
     <ItemGroup>

@@ -4,21 +4,55 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace Axon.Server.Hubs;
 
-public class AxonHub(IAxonJobService jobService) : Hub<AxonHub>
+public class AxonHub(
+    IAxonJobService jobService,
+    IAxonRecurringJobService recurringJobService,
+    IDeviceConnectionRegistry deviceRegistry) : Hub<AxonHub>
 {
-    
-    public override async Task OnConnectedAsync()
+
+    public override Task OnConnectedAsync()
     {
         Console.WriteLine($"OnConnectedAsync called {Context.ConnectionId}");
+        return Task.CompletedTask;
     }
 
-    public Task Enqueue(string deviceName, string jobId, JobInfo jobInfo)
+    public void Register(string deviceName)
     {
-        return jobService.EnqueueAsync(Context.ConnectionId, jobId, jobInfo);
+        deviceRegistry.Register(deviceName, Context.ConnectionId);
     }
 
-    public override async Task OnDisconnectedAsync(Exception exception)
+    public Task Enqueue(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor)
+    {
+        deviceRegistry.Register(deviceName, Context.ConnectionId);
+        return jobService.EnqueueAsync(deviceName, jobId, jobInfo, scheduledFor);
+    }
+
+    public Task AddOrUpdateRecurring(string deviceName, string recurringJobId, JobInfo jobInfo, string cronExpression)
+    {
+        deviceRegistry.Register(deviceName, Context.ConnectionId);
+        return recurringJobService.AddOrUpdateAsync(deviceName, recurringJobId, jobInfo, cronExpression);
+    }
+
+    public Task RemoveRecurring(string recurringJobId)
+    {
+        return recurringJobService.RemoveAsync(recurringJobId);
+    }
+
+    public Task OnSuccess(string jobId)
+    {
+        return jobService.MarkSucceededAsync(jobId);
+    }
+
+    public Task OnFail(string jobId, string error)
+    {
+        Console.WriteLine($"Job {jobId} failed: {error}");
+        return jobService.MarkFailedAsync(jobId, error);
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception)
     {
         Console.WriteLine($"OnDisconnectedAsync called {Context.ConnectionId}");
+        deviceRegistry.Unregister(Context.ConnectionId);
+        return Task.CompletedTask;
     }
 }

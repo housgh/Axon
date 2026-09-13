@@ -1,0 +1,1056 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Axon Dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #f0f1f4;
+    --border: #e2e4e9;
+    --text: #1a1d23;
+    --text-muted: #6b7280;
+    --text-faint: #9aa0ab;
+    --accent: #4f5fe0;
+    --accent-hover: #3f4dc9;
+    --accent-soft: #eceeff;
+    --danger: #d64545;
+    --danger-soft: #fbeaea;
+    --success: #1f9d55;
+    --success-soft: #e8f7ee;
+    --warning: #b5790a;
+    --warning-soft: #fcf1dc;
+    --info: #2f7dd6;
+    --info-soft: #e9f2fd;
+    --neutral: #6b7280;
+    --neutral-soft: #eef0f2;
+    --shadow: 0 1px 2px rgba(16,18,24,0.04), 0 8px 24px rgba(16,18,24,0.06);
+    --radius: 10px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  :root:not([data-theme="light"]) {
+    @media (prefers-color-scheme: dark) {
+      --bg: #14161b;
+      --surface: #1b1e25;
+      --surface-2: #22252d;
+      --border: #2c303a;
+      --text: #eef0f3;
+      --text-muted: #9aa1ad;
+      --text-faint: #6b7280;
+      --accent: #7c88f0;
+      --accent-hover: #929cf3;
+      --accent-soft: #262a49;
+      --danger: #f0716f;
+      --danger-soft: #3a2226;
+      --success: #4cca85;
+      --success-soft: #1c3327;
+      --warning: #e0ac4c;
+      --warning-soft: #3a2f18;
+      --info: #6ab0f5;
+      --info-soft: #1e2c3d;
+      --neutral: #9aa1ad;
+      --neutral-soft: #262931;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #14161b;
+    --surface: #1b1e25;
+    --surface-2: #22252d;
+    --border: #2c303a;
+    --text: #eef0f3;
+    --text-muted: #9aa1ad;
+    --text-faint: #6b7280;
+    --accent: #7c88f0;
+    --accent-hover: #929cf3;
+    --accent-soft: #262a49;
+    --danger: #f0716f;
+    --danger-soft: #3a2226;
+    --success: #4cca85;
+    --success-soft: #1c3327;
+    --warning: #e0ac4c;
+    --warning-soft: #3a2f18;
+    --info: #6ab0f5;
+    --info-soft: #1e2c3d;
+    --neutral: #9aa1ad;
+    --neutral-soft: #262931;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 20px 20px 64px;
+  }
+
+  header.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 0 20px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .brand .mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), #8f6ff0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .brand h1 {
+    font-size: 16px;
+    font-weight: 650;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .brand .sub {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  button, .btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 550;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 7px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.12s, border-color 0.12s, transform 0.05s;
+    white-space: nowrap;
+  }
+  button:hover, .btn:hover { background: var(--surface-2); }
+  button:active, .btn:active { transform: translateY(1px); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button:disabled:hover { background: var(--surface); }
+
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+  button.danger-ghost { color: var(--danger); }
+  button.danger-ghost:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+  button.icon-btn {
+    padding: 7px;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+  }
+
+  .theme-toggle {
+    display: flex;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .theme-toggle button {
+    border: none;
+    background: transparent;
+    padding: 5px 9px;
+    border-radius: 6px;
+    color: var(--text-muted);
+  }
+  .theme-toggle button:hover { background: var(--surface); }
+  .theme-toggle button.active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 900px) { .stats { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 520px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: border-color 0.12s, transform 0.05s;
+  }
+  .stat:hover { border-color: var(--accent); }
+  .stat:active { transform: translateY(1px); }
+  .stat.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .stat .num {
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat .lbl {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot.total { background: var(--text-faint); }
+  .dot.enqueued { background: var(--info); }
+  .dot.scheduled { background: var(--neutral); }
+  .dot.processing { background: var(--warning); }
+  .dot.succeeded { background: var(--success); }
+  .dot.failed { background: var(--danger); }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .panel-head h2 {
+    font-size: 14px;
+    font-weight: 620;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-head h2 .count {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    padding: 1px 7px;
+    border-radius: 100px;
+  }
+
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  select, input[type="text"] {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+  }
+  select:focus, input:focus, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    font-weight: 620;
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr.job-row { cursor: pointer; }
+
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .job-method { font-weight: 600; }
+  .job-type { color: var(--text-muted); font-size: 12px; }
+  .job-args {
+    color: var(--text-muted);
+    font-size: 12px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11.5px;
+    font-weight: 620;
+    padding: 3px 9px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+  .badge.enqueued { background: var(--info-soft); color: var(--info); }
+  .badge.scheduled { background: var(--neutral-soft); color: var(--neutral); }
+  .badge.processing { background: var(--warning-soft); color: var(--warning); }
+  .badge.succeeded { background: var(--success-soft); color: var(--success); }
+  .badge.failed { background: var(--danger-soft); color: var(--danger); }
+
+  .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  .empty {
+    padding: 48px 20px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .empty .big { font-size: 28px; margin-bottom: 6px; }
+  .empty .hint { font-size: 12.5px; color: var(--text-faint); margin-top: 4px; }
+
+  .panel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--text-muted);
+  }
+
+  .pager { display: flex; gap: 6px; align-items: center; }
+  .pager button { padding: 5px 10px; }
+
+  code.inline {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 5px;
+    color: var(--text);
+  }
+
+  .device-name { font-size: 12.5px; color: var(--text-muted); }
+
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px var(--success-soft);
+    flex-shrink: 0;
+  }
+  .live-dot.off { background: var(--text-faint); box-shadow: 0 0 0 3px var(--surface-2); }
+
+  .toast-stack {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 50;
+  }
+  .toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    border-radius: 9px;
+    padding: 10px 14px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: slideIn 0.18s ease-out;
+    max-width: 320px;
+  }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+  .toast.success { border-color: var(--success); }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 37%, var(--surface-2) 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+    border-radius: 6px;
+    height: 14px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 100% 50%; }
+    100% { background-position: 0 50%; }
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10,11,14,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-backdrop[hidden] { display: none; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    width: 100%;
+    max-width: 420px;
+    padding: 20px;
+  }
+  .modal h3 { margin: 0 0 8px; font-size: 15px; }
+  .modal p { margin: 0 0 18px; color: var(--text-muted); font-size: 13px; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+
+  .table-scroll { overflow-x: auto; }
+
+  .cron-code {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--surface-2);
+    padding: 3px 8px;
+    border-radius: 6px;
+  }
+
+  .refresh-note {
+    font-size: 11.5px;
+    color: var(--text-faint);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">A</div>
+      <div>
+        <h1>Axon Dashboard</h1>
+        <div class="sub" id="apiBaseLabel">jobs &amp; recurring schedules</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span class="refresh-note"><span class="live-dot" id="liveDot"></span><span id="liveLabel">live</span></span>
+      <button id="refreshBtn" title="Refresh now">⟳ Refresh</button>
+      <div class="theme-toggle" role="group" aria-label="Theme">
+        <button data-theme-choice="light" title="Light">☀</button>
+        <button data-theme-choice="dark" title="Dark">☾</button>
+        <button data-theme-choice="system" title="Match system">◐</button>
+      </div>
+      <button id="logoutBtn" title="Sign out">Sign out</button>
+    </div>
+  </header>
+
+  <div class="stats" id="statCards"></div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Jobs <span class="count" id="jobsCount">0</span></h2>
+      <div class="filters">
+        <select id="stateFilter">
+          <option value="">All states</option>
+          <option value="0">Enqueued</option>
+          <option value="1">Scheduled</option>
+          <option value="2">Processing</option>
+          <option value="3">Succeeded</option>
+          <option value="4">Failed</option>
+        </select>
+        <select id="pageSize">
+          <option value="10">10 / page</option>
+          <option value="20" selected>20 / page</option>
+          <option value="50">50 / page</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Device</th>
+            <th>State</th>
+            <th>Attempts</th>
+            <th>Scheduled for</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="jobsBody"></tbody>
+      </table>
+    </div>
+    <div id="jobsEmpty" class="empty" hidden>
+      <div class="big">📭</div>
+      <div>No jobs match this filter</div>
+      <div class="hint">Jobs enqueued from any Axon client will show up here.</div>
+    </div>
+    <div class="panel-foot">
+      <span id="pageInfo">—</span>
+      <div class="pager">
+        <button id="prevPage">← Prev</button>
+        <button id="nextPage">Next →</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recurring jobs <span class="count" id="recurringCount">0</span></h2>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Id</th>
+            <th>Method</th>
+            <th>Device</th>
+            <th>Cron</th>
+            <th>Last run</th>
+            <th>Next run</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="recurringBody"></tbody>
+      </table>
+    </div>
+    <div id="recurringEmpty" class="empty" hidden>
+      <div class="big">🕒</div>
+      <div>No recurring jobs configured</div>
+      <div class="hint">Register one with <code class="inline">AddOrUpdateRecurringAsync</code>.</div>
+    </div>
+  </section>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script>
+(function () {
+  const root = document.documentElement;
+  const THEME_KEY = 'axon-dashboard-theme';
+
+  function applyTheme(choice) {
+    if (choice === 'light' || choice === 'dark') {
+      root.setAttribute('data-theme', choice);
+    } else {
+      root.removeAttribute('data-theme');
+    }
+    document.querySelectorAll('[data-theme-choice]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-theme-choice') === choice);
+    });
+    try { localStorage.setItem(THEME_KEY, choice); } catch (e) {}
+  }
+
+  let storedTheme = 'system';
+  try { storedTheme = localStorage.getItem(THEME_KEY) || 'system'; } catch (e) {}
+  applyTheme(storedTheme);
+
+  document.querySelectorAll('[data-theme-choice]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyTheme(btn.getAttribute('data-theme-choice'));
+    });
+  });
+
+  const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed'];
+  const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed'];
+
+  const state = {
+    stateFilter: '',
+    pageSize: 20,
+    skip: 0,
+    lastJobsLength: 0,
+    activeStatCard: null,
+  };
+
+  const jobsBody = document.getElementById('jobsBody');
+  const jobsEmpty = document.getElementById('jobsEmpty');
+  const jobsCount = document.getElementById('jobsCount');
+  const recurringBody = document.getElementById('recurringBody');
+  const recurringEmpty = document.getElementById('recurringEmpty');
+  const recurringCount = document.getElementById('recurringCount');
+  const pageInfo = document.getElementById('pageInfo');
+  const statCards = document.getElementById('statCards');
+  const liveDot = document.getElementById('liveDot');
+  const liveLabel = document.getElementById('liveLabel');
+
+  const STAT_DEFS = [
+    { key: 'total', label: 'Total', dot: 'total' },
+    { key: '0', label: 'Enqueued', dot: 'enqueued' },
+    { key: '1', label: 'Scheduled', dot: 'scheduled' },
+    { key: '2', label: 'Processing', dot: 'processing' },
+    { key: '3', label: 'Succeeded', dot: 'succeeded' },
+    { key: '4', label: 'Failed', dot: 'failed' },
+  ];
+
+  STAT_DEFS.forEach(function (def) {
+    const card = document.createElement('div');
+    card.className = 'stat';
+    card.dataset.key = def.key;
+    card.innerHTML = '<div class="num" id="stat-' + def.key + '">–</div>' +
+      '<div class="lbl"><span class="dot ' + def.dot + '"></span>' + def.label + '</div>';
+    card.addEventListener('click', function () {
+      state.stateFilter = def.key === 'total' ? '' : def.key;
+      document.getElementById('stateFilter').value = state.stateFilter;
+      state.skip = 0;
+      highlightActiveStat();
+      loadJobs();
+    });
+    statCards.appendChild(card);
+  });
+
+  function highlightActiveStat() {
+    document.querySelectorAll('.stat').forEach(function (card) {
+      const key = card.dataset.key;
+      const isActive = (key === 'total' && state.stateFilter === '') || key === state.stateFilter;
+      card.classList.toggle('active', isActive);
+    });
+  }
+  highlightActiveStat();
+
+  function toast(message, type) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (type ? ' ' + type : '');
+    el.textContent = message;
+    document.getElementById('toastStack').appendChild(el);
+    setTimeout(function () {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity 0.2s';
+      setTimeout(function () { el.remove(); }, 200);
+    }, 3200);
+  }
+
+  function ticksToDate(ticks) {
+    if (ticks === null || ticks === undefined) return null;
+    var ticksSinceEpoch = ticks - 621355968000000000;
+    return new Date(ticksSinceEpoch / 10000);
+  }
+
+  function fmtDate(ticks) {
+    const d = ticksToDate(ticks);
+    if (!d) return '—';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function relativeTime(ticks) {
+    const d = ticksToDate(ticks);
+    if (!d) return '';
+    const diffMs = d.getTime() - Date.now();
+    const abs = Math.abs(diffMs);
+    const mins = Math.round(abs / 60000);
+    let label;
+    if (mins < 1) label = 'moments';
+    else if (mins < 60) label = mins + 'm';
+    else if (mins < 1440) label = Math.round(mins / 60) + 'h';
+    else label = Math.round(mins / 1440) + 'd';
+    return diffMs < 0 ? label + ' ago' : 'in ' + label;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function shortType(fullType) {
+    if (!fullType) return '';
+    const parts = fullType.split('.');
+    return parts[parts.length - 1];
+  }
+
+  function fmtArgs(args) {
+    if (!args || !args.length) return '()';
+    try {
+      return '(' + args.map(function (a) { return JSON.stringify(a); }).join(', ') + ')';
+    } catch (e) {
+      return '(…)';
+    }
+  }
+
+  async function apiFetch(url, options) {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      window.location.href = '/axon/login?returnUrl=' + encodeURIComponent(window.location.pathname);
+      throw new Error('Not authenticated');
+    }
+    if (!res.ok && res.status !== 204) {
+      throw new Error('Request failed (' + res.status + ')');
+    }
+    return res;
+  }
+
+  async function loadStats() {
+    try {
+      const results = await Promise.all(STATE_NAMES.map(function (_, idx) {
+        return apiFetch('/axon/jobs?skip=0&take=1000&state=' + idx).then(function (r) { return r.json(); });
+      }));
+      let total = 0;
+      results.forEach(function (list, idx) {
+        document.getElementById('stat-' + idx).textContent = list.length;
+        total += list.length;
+      });
+      document.getElementById('stat-total').textContent = total;
+      setLive(true);
+    } catch (e) {
+      setLive(false);
+    }
+  }
+
+  function setLive(ok) {
+    liveDot.classList.toggle('off', !ok);
+    liveLabel.textContent = ok ? 'live' : 'offline';
+  }
+
+  function renderJobRow(job) {
+    const stateIdx = job.state;
+    const tr = document.createElement('tr');
+    tr.className = 'job-row';
+
+    const scheduledCell = job.scheduledFor
+      ? '<span title="' + fmtDate(job.scheduledFor) + '">' + relativeTime(job.scheduledFor) + '</span>'
+      : '<span style="color:var(--text-faint)">—</span>';
+
+    const attemptsCell = job.attempts > 0
+      ? job.attempts + ' / ' + job.maxAttempts
+      : '<span style="color:var(--text-faint)">0 / ' + job.maxAttempts + '</span>';
+
+    tr.innerHTML =
+      '<td>' +
+        '<div class="job-method">' + escapeHtml(job.methodName) + '</div>' +
+        '<div class="job-type">' + escapeHtml(shortType(job.declaringType)) + '</div>' +
+        '<div class="job-args mono" title="' + escapeHtml(fmtArgs(job.arguments)) + '">' + escapeHtml(fmtArgs(job.arguments)) + '</div>' +
+      '</td>' +
+      '<td><span class="device-name" title="' + escapeHtml(job.deviceName) + '">' + escapeHtml(shortDevice(job.deviceName)) + '</span></td>' +
+      '<td><span class="badge ' + STATE_CLASSES[stateIdx] + '">' + STATE_NAMES[stateIdx] + '</span></td>' +
+      '<td class="mono">' + attemptsCell + '</td>' +
+      '<td>' + scheduledCell + '</td>' +
+      '<td><div class="row-actions"></div></td>';
+
+    const actions = tr.querySelector('.row-actions');
+
+    if (stateIdx === 4) {
+      const retryBtn = document.createElement('button');
+      retryBtn.textContent = 'Retry';
+      retryBtn.addEventListener('click', function (e) { e.stopPropagation(); retryJob(job.jobId, retryBtn); });
+      actions.appendChild(retryBtn);
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn danger-ghost';
+    delBtn.title = 'Delete job';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', function (e) { e.stopPropagation(); confirmDelete(job.jobId); });
+    actions.appendChild(delBtn);
+
+    tr.addEventListener('click', function () {
+      window.open('/axon/jobs/' + encodeURIComponent(job.jobId) + '/view', '_blank');
+    });
+
+    return tr;
+  }
+
+  function shortDevice(name) {
+    if (!name) return '';
+    const idx = name.lastIndexOf('_');
+    return idx > -1 ? name.slice(0, idx) : name;
+  }
+
+
+  async function retryJob(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Retrying…';
+    try {
+      await apiFetch('/axon/jobs/' + encodeURIComponent(jobId) + '/retry', { method: 'POST' });
+      toast('Job requeued', 'success');
+      loadAll();
+    } catch (e) {
+      toast('Could not retry job', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+    }
+  }
+
+  let pendingDeleteId = null;
+  function confirmDelete(jobId) {
+    pendingDeleteId = jobId;
+    document.getElementById('deleteModalBackdrop').hidden = false;
+  }
+
+  async function loadJobs() {
+    const params = new URLSearchParams();
+    params.set('skip', state.skip);
+    params.set('take', state.pageSize);
+    if (state.stateFilter !== '') params.set('state', state.stateFilter);
+
+    try {
+      const res = await apiFetch('/axon/jobs?' + params.toString());
+      const jobs = await res.json();
+      jobsCount.textContent = jobs.length + (jobs.length === state.pageSize ? '+' : '');
+      jobsBody.innerHTML = '';
+      jobsEmpty.hidden = jobs.length > 0;
+
+      jobs.sort(function (a, b) {
+        const at = a.scheduledFor || 0, bt = b.scheduledFor || 0;
+        return bt - at;
+      });
+
+      jobs.forEach(function (job) { jobsBody.appendChild(renderJobRow(job)); });
+
+      const start = jobs.length ? state.skip + 1 : 0;
+      const end = state.skip + jobs.length;
+      pageInfo.textContent = jobs.length ? ('Showing ' + start + '–' + end) : 'No results';
+      document.getElementById('prevPage').disabled = state.skip === 0;
+      document.getElementById('nextPage').disabled = jobs.length < state.pageSize;
+      state.lastJobsLength = jobs.length;
+      setLive(true);
+    } catch (e) {
+      setLive(false);
+    }
+  }
+
+  function renderRecurringRow(rj) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="mono">' + escapeHtml(rj.recurringJobId) + '</td>' +
+      '<td>' +
+        '<div class="job-method">' + escapeHtml(rj.methodName) + '</div>' +
+        '<div class="job-type">' + escapeHtml(shortType(rj.declaringType)) + '</div>' +
+      '</td>' +
+      '<td><span class="device-name" title="' + escapeHtml(rj.deviceName) + '">' + escapeHtml(shortDevice(rj.deviceName)) + '</span></td>' +
+      '<td><span class="cron-code">' + escapeHtml(rj.cronExpression) + '</span></td>' +
+      '<td>' + (rj.lastRunAt ? '<span title="' + fmtDate(rj.lastRunAt) + '">' + relativeTime(rj.lastRunAt) + '</span>' : '<span style="color:var(--text-faint)">never</span>') + '</td>' +
+      '<td><span title="' + fmtDate(rj.nextRunAt) + '">' + relativeTime(rj.nextRunAt) + '</span></td>' +
+      '<td><div class="row-actions"></div></td>';
+
+    const actions = tr.querySelector('.row-actions');
+
+    const runBtn = document.createElement('button');
+    runBtn.title = 'Run now';
+    runBtn.textContent = '▶ Run now';
+    runBtn.addEventListener('click', function () { triggerRecurring(rj.recurringJobId, runBtn); });
+    actions.appendChild(runBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn danger-ghost';
+    delBtn.title = 'Remove recurring job';
+    delBtn.textContent = '✕';
+    delBtn.addEventListener('click', function () { confirmRemoveRecurring(rj.recurringJobId, delBtn); });
+    actions.appendChild(delBtn);
+
+    return tr;
+  }
+
+  async function triggerRecurring(id, btn) {
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Running…';
+    try {
+      await apiFetch('/axon/recurring-jobs/' + encodeURIComponent(id) + '/trigger', { method: 'POST' });
+      toast('Job triggered', 'success');
+      loadJobs();
+      loadStats();
+    } catch (e) {
+      toast('Could not trigger job', 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+
+  async function removeRecurring(id) {
+    try {
+      await apiFetch('/axon/recurring-jobs/' + encodeURIComponent(id), { method: 'DELETE' });
+      toast('Recurring job removed', 'success');
+      loadRecurring();
+    } catch (e) {
+      toast('Could not remove recurring job', 'error');
+    }
+  }
+
+  let pendingRemoveRecurringId = null;
+  function confirmRemoveRecurring(id) {
+    pendingRemoveRecurringId = id;
+    const modal = document.getElementById('removeRecurringModalBackdrop');
+    document.getElementById('removeRecurringName').textContent = id;
+    const input = document.getElementById('removeRecurringInput');
+    input.value = '';
+    document.getElementById('removeRecurringConfirmBtn').disabled = true;
+    modal.hidden = false;
+    input.focus();
+  }
+
+  async function loadRecurring() {
+    try {
+      const res = await apiFetch('/axon/recurring-jobs');
+      const jobs = await res.json();
+      recurringCount.textContent = jobs.length;
+      recurringBody.innerHTML = '';
+      recurringEmpty.hidden = jobs.length > 0;
+      jobs.forEach(function (rj) { recurringBody.appendChild(renderRecurringRow(rj)); });
+      setLive(true);
+    } catch (e) {
+      setLive(false);
+    }
+  }
+
+  function loadAll() {
+    loadStats();
+    loadJobs();
+    loadRecurring();
+  }
+
+  document.getElementById('stateFilter').addEventListener('change', function (e) {
+    state.stateFilter = e.target.value;
+    state.skip = 0;
+    highlightActiveStat();
+    loadJobs();
+  });
+  document.getElementById('pageSize').addEventListener('change', function (e) {
+    state.pageSize = parseInt(e.target.value, 10);
+    state.skip = 0;
+    loadJobs();
+  });
+  document.getElementById('prevPage').addEventListener('click', function () {
+    state.skip = Math.max(0, state.skip - state.pageSize);
+    loadJobs();
+  });
+  document.getElementById('nextPage').addEventListener('click', function () {
+    state.skip += state.pageSize;
+    loadJobs();
+  });
+  document.getElementById('refreshBtn').addEventListener('click', loadAll);
+  document.getElementById('logoutBtn').addEventListener('click', async function () {
+    try {
+      await fetch('/axon/logout', { method: 'POST' });
+    } catch (e) {
+      // ignore; redirect regardless
+    }
+    window.location.href = '/axon/login';
+  });
+
+  document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal-backdrop" id="deleteModalBackdrop" hidden>' +
+      '<div class="modal">' +
+        '<h3>Delete this job?</h3>' +
+        '<p>This removes it from the job list. This cannot be undone.</p>' +
+        '<div class="actions">' +
+          '<button id="cancelDelete">Cancel</button>' +
+          '<button class="primary" style="background:var(--danger);border-color:var(--danger)" id="confirmDelete">Delete</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="modal-backdrop" id="removeRecurringModalBackdrop" hidden>' +
+      '<div class="modal">' +
+        '<h3>Remove recurring job?</h3>' +
+        '<p>This stops <code class="inline" id="removeRecurringName"></code> from running on its schedule. This cannot be undone.</p>' +
+        '<p>Type the recurring job id to confirm.</p>' +
+        '<input type="text" id="removeRecurringInput" autocomplete="off" style="width:100%;margin-bottom:14px;" />' +
+        '<div class="actions">' +
+          '<button id="cancelRemoveRecurring">Cancel</button>' +
+          '<button class="primary" style="background:var(--danger);border-color:var(--danger)" id="removeRecurringConfirmBtn" disabled>Remove</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>');
+
+  document.getElementById('cancelDelete').addEventListener('click', function () {
+    document.getElementById('deleteModalBackdrop').hidden = true;
+    pendingDeleteId = null;
+  });
+  document.getElementById('confirmDelete').addEventListener('click', async function () {
+    if (!pendingDeleteId) return;
+    try {
+      await apiFetch('/axon/jobs/' + encodeURIComponent(pendingDeleteId), { method: 'DELETE' });
+      toast('Job deleted', 'success');
+      loadJobs();
+      loadStats();
+    } catch (e) {
+      toast('Could not delete job', 'error');
+    }
+    document.getElementById('deleteModalBackdrop').hidden = true;
+    pendingDeleteId = null;
+  });
+
+  document.getElementById('removeRecurringInput').addEventListener('input', function (e) {
+    document.getElementById('removeRecurringConfirmBtn').disabled = e.target.value !== pendingRemoveRecurringId;
+  });
+  document.getElementById('cancelRemoveRecurring').addEventListener('click', function () {
+    document.getElementById('removeRecurringModalBackdrop').hidden = true;
+    pendingRemoveRecurringId = null;
+  });
+  document.getElementById('removeRecurringConfirmBtn').addEventListener('click', async function () {
+    if (!pendingRemoveRecurringId || document.getElementById('removeRecurringInput').value !== pendingRemoveRecurringId) return;
+    await removeRecurring(pendingRemoveRecurringId);
+    document.getElementById('removeRecurringModalBackdrop').hidden = true;
+    pendingRemoveRecurringId = null;
+  });
+
+  loadAll();
+  setInterval(loadAll, 5000);
+})();
+</script>
+</body>
+</html>

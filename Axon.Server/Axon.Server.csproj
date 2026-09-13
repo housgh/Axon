@@ -6,6 +6,11 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <PackageId>Axon.Server</PackageId>
+        <Description>Job scheduler/dispatcher for Axon: SignalR hub, job store, background processors, and an admin dashboard.</Description>
+    </PropertyGroup>
+
     <ItemGroup>
       <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.0" />
     </ItemGroup>
@@ -16,6 +21,16 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Axon.Core\Axon.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <EmbeddedResource Include="Dashboard\index.html" />
+      <EmbeddedResource Include="Dashboard\login.html" />
+      <EmbeddedResource Include="Dashboard\job.html" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
 </Project>

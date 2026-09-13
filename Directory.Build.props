@@ -1,0 +1,20 @@
+<Project>
+
+    <PropertyGroup>
+        <Authors>houssamghannoum</Authors>
+        <PackageProjectUrl>https://github.com/housgh/Axon</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/housgh/Axon</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+
+        <!-- Set by the release workflow from the pushed tag (e.g. v1.2.3 -> 1.2.3).
+             Defaults to a local/dev version so `dotnet pack` still works outside CI. -->
+        <Version Condition="'$(Version)' == ''">0.0.1-dev</Version>
+    </PropertyGroup>
+
+</Project>
