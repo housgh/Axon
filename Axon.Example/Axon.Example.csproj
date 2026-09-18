@@ -14,6 +14,7 @@
     <ItemGroup>
       <ProjectReference Include="..\Axon.Client\Axon.Client.csproj" />
       <ProjectReference Include="..\Axon.Server\Axon.Server.csproj" />
+      <ProjectReference Include="..\Axon.Store.SqlServer\Axon.Store.SqlServer.csproj" />
     </ItemGroup>
 
 </Project>

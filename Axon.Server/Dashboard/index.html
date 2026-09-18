@@ -499,6 +499,7 @@
       </div>
     </div>
     <div class="top-actions">
+      <span class="refresh-note" id="currentUser"></span>
       <span class="refresh-note"><span class="live-dot" id="liveDot"></span><span id="liveLabel">live</span></span>
       <button id="refreshBtn" title="Refresh now">⟳ Refresh</button>
       <div class="theme-toggle" role="group" aria-label="Theme">
@@ -619,6 +620,7 @@
 
   const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed'];
   const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed'];
+  let isReadOnly = false;
 
   const state = {
     stateFilter: '',
@@ -793,19 +795,21 @@
 
     const actions = tr.querySelector('.row-actions');
 
-    if (stateIdx === 4) {
+    if (stateIdx === 4 && !isReadOnly) {
       const retryBtn = document.createElement('button');
       retryBtn.textContent = 'Retry';
       retryBtn.addEventListener('click', function (e) { e.stopPropagation(); retryJob(job.jobId, retryBtn); });
       actions.appendChild(retryBtn);
     }
 
-    const delBtn = document.createElement('button');
-    delBtn.className = 'icon-btn danger-ghost';
-    delBtn.title = 'Delete job';
-    delBtn.textContent = '✕';
-    delBtn.addEventListener('click', function (e) { e.stopPropagation(); confirmDelete(job.jobId); });
-    actions.appendChild(delBtn);
+    if (!isReadOnly) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'icon-btn danger-ghost';
+      delBtn.title = 'Delete job';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', function (e) { e.stopPropagation(); confirmDelete(job.jobId); });
+      actions.appendChild(delBtn);
+    }
 
     tr.addEventListener('click', function () {
       window.open('/axon/jobs/' + encodeURIComponent(job.jobId) + '/view', '_blank');
@@ -889,18 +893,20 @@
 
     const actions = tr.querySelector('.row-actions');
 
-    const runBtn = document.createElement('button');
-    runBtn.title = 'Run now';
-    runBtn.textContent = '▶ Run now';
-    runBtn.addEventListener('click', function () { triggerRecurring(rj.recurringJobId, runBtn); });
-    actions.appendChild(runBtn);
+    if (!isReadOnly) {
+      const runBtn = document.createElement('button');
+      runBtn.title = 'Run now';
+      runBtn.textContent = '▶ Run now';
+      runBtn.addEventListener('click', function () { triggerRecurring(rj.recurringJobId, runBtn); });
+      actions.appendChild(runBtn);
 
-    const delBtn = document.createElement('button');
-    delBtn.className = 'icon-btn danger-ghost';
-    delBtn.title = 'Remove recurring job';
-    delBtn.textContent = '✕';
-    delBtn.addEventListener('click', function () { confirmRemoveRecurring(rj.recurringJobId, delBtn); });
-    actions.appendChild(delBtn);
+      const delBtn = document.createElement('button');
+      delBtn.className = 'icon-btn danger-ghost';
+      delBtn.title = 'Remove recurring job';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', function () { confirmRemoveRecurring(rj.recurringJobId, delBtn); });
+      actions.appendChild(delBtn);
+    }
 
     return tr;
   }
@@ -1048,8 +1054,14 @@
     pendingRemoveRecurringId = null;
   });
 
-  loadAll();
-  setInterval(loadAll, 5000);
+  apiFetch('/axon/me').then(function (r) { return r.json(); }).then(function (me) {
+    isReadOnly = me.role !== 'Admin';
+    const userLabel = document.getElementById('currentUser');
+    if (userLabel) userLabel.textContent = me.username + (isReadOnly ? ' (read-only)' : '');
+  }).catch(function () {}).then(function () {
+    loadAll();
+    setInterval(loadAll, 5000);
+  });
 })();
 </script>
 </body>

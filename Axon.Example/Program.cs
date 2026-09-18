@@ -2,6 +2,8 @@ using Axon.Client.DependencyInjection;
 using Axon.Client.Services;
 using Axon.Example.Controllers;
 using Axon.Server.DependencyInjection;
+using Axon.Server.Services;
+using Axon.SqlServer;
 using Microsoft.AspNetCore.SignalR.Client;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,11 +15,20 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.Services.AddAxonServer(auth =>
+builder.Services.AddAxonServer()
+    .AddAxonDashboard()
+    .AddAuthentication(auth =>
+    {
+        builder.Configuration.GetSection("Axon:DashboardUsers").Bind(auth.Users);
+        if (auth.Users.Count == 0)
+            throw new InvalidOperationException("Axon:DashboardUsers is not configured.");
+    });
+
+var sqlConnectionString = builder.Configuration["Axon:SqlConnectionString"];
+if (!string.IsNullOrEmpty(sqlConnectionString))
 {
-    auth.Password = builder.Configuration["Axon:DashboardPassword"]
-        ?? throw new InvalidOperationException("Axon:DashboardPassword is not configured.");
-});
+    builder.Services.AddAxonSqlServerStore(sqlConnectionString);
+}
 
 // This example hosts the Axon client and server in the same process, so it points the client
 // back at whichever address Kestrel is actually configured to bind for this run (the "urls"

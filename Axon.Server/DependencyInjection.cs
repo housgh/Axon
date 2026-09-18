@@ -15,12 +15,15 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Axon.Server.DependencyInjection;
 
 public static class DependencyInjection
 {
     private const string AuthScheme = "AxonDashboard";
+    private const string AuthPolicy = "AxonDashboardAuth";
+    private const string WritePolicy = "AxonDashboardWrite";
     private static string? _dashboardHtml;
     private static string? _loginHtml;
     private static string? _jobHtml;
@@ -49,24 +52,59 @@ public static class DependencyInjection
         return CryptographicOperations.FixedTimeEquals(aHash, bHash);
     }
 
-    public static void AddAxonServer(this IServiceCollection services, Action<DashboardAuthOptions> configureAuth)
+    public static AxonServerBuilder AddAxonServer(this IServiceCollection services)
     {
-        var authOptions = new DashboardAuthOptions();
-        configureAuth(authOptions);
-        if (string.IsNullOrEmpty(authOptions.Password))
-            throw new InvalidOperationException("Axon dashboard password must be configured.");
-        services.AddSingleton(authOptions);
-
         services.AddSignalR();
         services.TryAddSingleton<IAxonJobStore, InMemoryAxonJobStore>();
         services.TryAddSingleton<IAxonRecurringJobStore, InMemoryAxonRecurringJobStore>();
         services.AddSingleton<IDeviceConnectionRegistry, DeviceConnectionRegistry>();
-        services.AddScoped<IAxonJobService, AxonJobService>();
+        services.AddSingleton<IAxonJobService, AxonJobService>();
         services.AddScoped<IAxonRecurringJobService, AxonRecurringJobService>();
         services.AddHostedService<AxonJobProcessor>();
         services.AddHostedService<AxonRecurringJobProcessor>();
 
-        services.AddAuthentication(AuthScheme)
+        return new AxonServerBuilder(services);
+    }
+
+    /// <summary>
+    /// Maps the JSON API under /axon (job/recurring-job listing, retry, delete, trigger).
+    /// Neither this nor the dashboard UI is mapped unless opted into explicitly.
+    /// </summary>
+    public static AxonServerBuilder AddAxonApiEndpoints(this AxonServerBuilder builder)
+    {
+        builder.Features.ApiEnabled = true;
+        return builder;
+    }
+
+    /// <summary>
+    /// Maps the JSON API plus the HTML dashboard UI (/axon/dashboard, /axon/login, job detail pages).
+    /// </summary>
+    public static AxonServerBuilder AddAxonDashboard(this AxonServerBuilder builder)
+    {
+        builder.AddAxonApiEndpoints();
+        builder.Features.DashboardEnabled = true;
+        return builder;
+    }
+
+    public static AxonServerBuilder AddAuthentication(this AxonServerBuilder builder, Action<DashboardAuthOptions> configureAuth)
+    {
+        var services = builder.Services;
+        var authOptions = new DashboardAuthOptions();
+        configureAuth(authOptions);
+        if (authOptions.Users.Count == 0)
+            throw new InvalidOperationException("At least one Axon dashboard user must be configured.");
+        if (authOptions.Users.Any(u => string.IsNullOrEmpty(u.Username) || string.IsNullOrEmpty(u.Password)))
+            throw new InvalidOperationException("Every Axon dashboard user must have a username and password.");
+        if (authOptions.Users.Select(u => u.Username).Distinct(StringComparer.OrdinalIgnoreCase).Count() != authOptions.Users.Count)
+            throw new InvalidOperationException("Axon dashboard usernames must be unique.");
+        services.AddSingleton(authOptions);
+
+        // No default scheme is set here (AddAuthentication() takes no scheme argument): setting one
+        // would overwrite AuthenticationOptions.DefaultScheme app-wide, silently breaking a host
+        // app's own auth (e.g. JWT bearer) if it configures its scheme before or after this call.
+        // Axon's cookie scheme is instead pinned explicitly wherever it's needed - see
+        // AuthScheme and WritePolicy usages below and in UseAxonServer.
+        services.AddAuthentication()
             .AddCookie(AuthScheme, options =>
             {
                 options.Cookie.Name = "axon_dashboard_auth";
@@ -85,8 +123,29 @@ public static class DependencyInjection
                         context.Response.Redirect(context.RedirectUri);
                     return Task.CompletedTask;
                 };
+                // Signed in but lacking the required role (e.g. a ReadOnly user hitting a write
+                // endpoint) is a 403, not a redirect to login - the cookie handler's default
+                // AccessDenied behavior would otherwise send API callers through the login flow.
+                options.Events.OnRedirectToAccessDenied = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return Task.CompletedTask;
+                };
             });
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            // Pin the scheme explicitly on every Axon policy: with no app-wide default scheme set
+            // above, authorization would otherwise try to authenticate against whatever scheme (if
+            // any) the host app made default, which may not be Axon's cookie at all.
+            options.AddPolicy(AuthPolicy, policy => policy
+                .AddAuthenticationSchemes(AuthScheme)
+                .RequireAuthenticatedUser());
+            options.AddPolicy(WritePolicy, policy => policy
+                .AddAuthenticationSchemes(AuthScheme)
+                .RequireRole(nameof(DashboardRole.Admin)));
+        });
+
+        return builder;
     }
 
     public static void UseAxonServer(this WebApplication app)
@@ -96,106 +155,200 @@ public static class DependencyInjection
 
         app.MapHub<AxonHub>("/hubs/axon");
 
+        var features = app.Services.GetService<AxonServerFeatures>();
+        var apiEnabled = features?.ApiEnabled ?? false;
+        var dashboardEnabled = features?.DashboardEnabled ?? false;
+        if (!apiEnabled && !dashboardEnabled)
+        {
+            app.Logger.LogInformation(
+                "Axon API/dashboard are not mapped (call AddAxonServer().AddAxonApiEndpoints() for the JSON API, " +
+                "or .AddAxonDashboard() for the API plus the HTML dashboard).");
+            return;
+        }
+
+        var authEnabled = app.Services.GetService<DashboardAuthOptions>() is not null;
+        if (!authEnabled)
+        {
+            app.Logger.LogWarning(
+                "Axon dashboard has no authentication configured (chain .AddAuthentication(...) off AddAxonApiEndpoints()/AddAxonDashboard() to require sign-in). " +
+                "Anyone who can reach this server can view and control jobs.");
+        }
+
         var axon = app.MapGroup("/axon");
 
-        axon.MapGet("/", (HttpContext http) => Results.Redirect(
-            http.User.Identity?.IsAuthenticated == true ? "/axon/dashboard" : "/axon/login")).AllowAnonymous();
-
-        axon.MapGet("/login", () => Results.Content(GetLoginHtml(), "text/html")).AllowAnonymous();
-
-        axon.MapPost("/login", async (HttpContext http, DashboardLoginRequest request, DashboardAuthOptions authOptions) =>
+        if (dashboardEnabled)
         {
-            if (string.IsNullOrEmpty(request.Password) || !PasswordsMatch(request.Password, authOptions.Password))
+            if (authEnabled)
             {
-                // Constant-ish delay so failed attempts don't respond meaningfully faster than successful ones.
-                await Task.Delay(300);
-                return Results.Unauthorized();
+                axon.MapGet("/", async (HttpContext http) =>
+                {
+                    var result = await http.AuthenticateAsync(AuthScheme);
+                    return Results.Redirect(result.Succeeded ? "/axon/dashboard" : "/axon/login");
+                }).AllowAnonymous();
+
+                axon.MapGet("/login", () => Results.Content(GetLoginHtml(), "text/html")).AllowAnonymous();
+            }
+            else
+            {
+                axon.MapGet("/", () => Results.Redirect("/axon/dashboard")).AllowAnonymous();
             }
 
-            var claims = new[] { new Claim(ClaimTypes.Name, "axon-admin") };
-            var identity = new ClaimsIdentity(claims, AuthScheme);
-            await http.SignInAsync(AuthScheme, new ClaimsPrincipal(identity), new AuthenticationProperties
+            axon.MapGet("/dashboard", () => Results.Content(GetDashboardHtml(), "text/html"));
+
+            axon.MapGet("/jobs/{jobId}/view", () => Results.Content(GetJobHtml(), "text/html"));
+        }
+
+        if (authEnabled)
+        {
+            axon.MapPost("/login", async (HttpContext http, DashboardLoginRequest request, DashboardAuthOptions authOptions) =>
             {
-                IsPersistent = true,
-                ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
+                var user = string.IsNullOrEmpty(request.Username)
+                    ? null
+                    : authOptions.Users.FirstOrDefault(u => string.Equals(u.Username, request.Username, StringComparison.OrdinalIgnoreCase));
+
+                if (user is null || string.IsNullOrEmpty(request.Password) || !PasswordsMatch(request.Password, user.Password))
+                {
+                    // Constant-ish delay so failed attempts don't respond meaningfully faster than successful ones.
+                    await Task.Delay(300);
+                    return Results.Unauthorized();
+                }
+
+                var claims = new[]
+                {
+                    new Claim(ClaimTypes.Name, user.Username),
+                    new Claim(ClaimTypes.Role, user.Role.ToString())
+                };
+                var identity = new ClaimsIdentity(claims, AuthScheme);
+                await http.SignInAsync(AuthScheme, new ClaimsPrincipal(identity), new AuthenticationProperties
+                {
+                    IsPersistent = true,
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
+                });
+
+                return Results.NoContent();
+            }).AllowAnonymous();
+
+            axon.MapPost("/logout", async (HttpContext http) =>
+            {
+                await http.SignOutAsync(AuthScheme);
+                return Results.NoContent();
             });
 
-            return Results.NoContent();
-        }).AllowAnonymous();
-
-        axon.MapPost("/logout", async (HttpContext http) =>
-        {
-            await http.SignOutAsync(AuthScheme);
-            return Results.NoContent();
-        });
-
-        axon.MapGet("/jobs", async (IAxonJobStore jobStore, int skip, int take, JobState? state) =>
-        {
-            var states = state is null ? null : new[] { state.Value };
-            var jobs = await jobStore.GetJobs(skip, take == 0 ? 20 : take, states);
-            return Results.Ok(jobs);
-        });
-
-        axon.MapGet("/jobs/{jobId}", async (IAxonJobStore jobStore, string jobId) =>
-        {
-            var job = await jobStore.GetJob(jobId);
-            return job is null ? Results.NotFound() : Results.Ok(job);
-        });
-
-        axon.MapDelete("/jobs/{jobId}", async (IAxonJobStore jobStore, string jobId) =>
-        {
-            await jobStore.DeleteJob(jobId);
-            return Results.NoContent();
-        });
-
-        axon.MapPost("/jobs/{jobId}/retry", async (IAxonJobStore jobStore, string jobId) =>
-        {
-            var job = await jobStore.GetJob(jobId);
-            if (job is null) return Results.NotFound();
-
-            await jobStore.Requeue(jobId);
-            return Results.NoContent();
-        });
-
-        axon.MapGet("/jobs/{jobId}/history", async (IAxonJobStore jobStore, string jobId) =>
-            Results.Ok(await jobStore.GetHistory(jobId)));
-
-        axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore) =>
-            Results.Ok(await recurringJobStore.GetAll()));
-
-        axon.MapDelete("/recurring-jobs/{recurringJobId}", async (IAxonRecurringJobStore recurringJobStore, string recurringJobId) =>
-        {
-            await recurringJobStore.Remove(recurringJobId);
-            return Results.NoContent();
-        });
-
-        axon.MapPost("/recurring-jobs/{recurringJobId}/trigger", async (
-            IAxonRecurringJobStore recurringJobStore, IAxonJobStore jobStore, string recurringJobId) =>
-        {
-            var recurringJob = (await recurringJobStore.GetAll())
-                .FirstOrDefault(r => r.RecurringJobId == recurringJobId);
-            if (recurringJob is null) return Results.NotFound();
-
-            var jobId = Guid.NewGuid().ToString();
-            await jobStore.AddJob(new Job(recurringJob)
+            axon.MapGet("/me", async (HttpContext http) =>
             {
-                JobId = jobId,
-                DeviceName = recurringJob.DeviceName,
-                State = JobState.Enqueued
+                var result = await http.AuthenticateAsync(AuthScheme);
+                return Results.Ok(new
+                {
+                    username = result.Principal?.Identity?.Name,
+                    role = result.Principal?.FindFirstValue(ClaimTypes.Role)
+                });
+            }).AllowAnonymous();
+        }
+        else
+        {
+            axon.MapGet("/me", () => Results.Ok(new { username = (string?)null, role = (string?)null })).AllowAnonymous();
+        }
+
+        if (apiEnabled)
+        {
+            axon.MapGet("/jobs", async (IAxonJobStore jobStore, int skip, int take, JobState? state) =>
+            {
+                var states = state is null ? null : new[] { state.Value };
+                var jobs = await jobStore.GetJobs(skip, take == 0 ? 20 : take, states);
+                return Results.Ok(jobs);
             });
 
-            return Results.Ok(new { jobId });
-        });
+            axon.MapGet("/jobs/{jobId}", async (IAxonJobStore jobStore, string jobId) =>
+            {
+                var job = await jobStore.GetJob(jobId);
+                return job is null ? Results.NotFound() : Results.Ok(job);
+            });
 
-        axon.MapGet("/dashboard", () => Results.Content(GetDashboardHtml(), "text/html"));
+            var deleteJob = axon.MapDelete("/jobs/{jobId}", async (IAxonJobStore jobStore, string jobId) =>
+            {
+                await jobStore.DeleteJob(jobId);
+                return Results.NoContent();
+            });
 
-        axon.MapGet("/jobs/{jobId}/view", () => Results.Content(GetJobHtml(), "text/html"));
+            var retryJob = axon.MapPost("/jobs/{jobId}/retry", async (IAxonJobStore jobStore, string jobId) =>
+            {
+                var job = await jobStore.GetJob(jobId);
+                if (job is null) return Results.NotFound();
 
-        axon.RequireAuthorization();
+                await jobStore.Requeue(jobId);
+                return Results.NoContent();
+            });
+
+            axon.MapGet("/jobs/{jobId}/history", async (IAxonJobStore jobStore, string jobId) =>
+                Results.Ok(await jobStore.GetHistory(jobId)));
+
+            axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore) =>
+                Results.Ok(await recurringJobStore.GetAll()));
+
+            var deleteRecurring = axon.MapDelete("/recurring-jobs/{recurringJobId}", async (IAxonRecurringJobStore recurringJobStore, string recurringJobId) =>
+            {
+                await recurringJobStore.Remove(recurringJobId);
+                return Results.NoContent();
+            });
+
+            var triggerRecurring = axon.MapPost("/recurring-jobs/{recurringJobId}/trigger", async (
+                IAxonRecurringJobStore recurringJobStore, IAxonJobStore jobStore, string recurringJobId) =>
+            {
+                var recurringJob = (await recurringJobStore.GetAll())
+                    .FirstOrDefault(r => r.RecurringJobId == recurringJobId);
+                if (recurringJob is null) return Results.NotFound();
+
+                var jobId = Guid.NewGuid().ToString();
+                await jobStore.AddJob(new Job(recurringJob)
+                {
+                    JobId = jobId,
+                    DeviceName = recurringJob.DeviceName,
+                    State = JobState.Enqueued
+                });
+
+                return Results.Ok(new { jobId });
+            });
+
+            if (authEnabled)
+            {
+                deleteJob.RequireAuthorization(WritePolicy);
+                retryJob.RequireAuthorization(WritePolicy);
+                deleteRecurring.RequireAuthorization(WritePolicy);
+                triggerRecurring.RequireAuthorization(WritePolicy);
+            }
+        }
+
+        if (authEnabled)
+        {
+            axon.RequireAuthorization(AuthPolicy);
+        }
+        else
+        {
+            axon.AllowAnonymous();
+        }
     }
 }
 
 public class DashboardLoginRequest
 {
+    public string Username { get; set; } = null!;
     public string Password { get; set; } = null!;
+}
+
+public class AxonServerFeatures
+{
+    public bool ApiEnabled { get; set; }
+    public bool DashboardEnabled { get; set; }
+}
+
+public class AxonServerBuilder
+{
+    public IServiceCollection Services { get; }
+    public AxonServerFeatures Features { get; } = new();
+
+    public AxonServerBuilder(IServiceCollection services)
+    {
+        Services = services;
+        services.AddSingleton(Features);
+    }
 }

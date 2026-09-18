@@ -316,6 +316,7 @@
   const content = document.getElementById('content');
 
   const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed'];
+  let isReadOnly = false;
   const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed'];
 
   function escapeHtml(str) {
@@ -512,8 +513,9 @@
           '<div class="sub">' + escapeHtml(job.declaringType) + '</div>' +
         '</div>' +
         '<div class="actions">' +
-          '<button class="danger-ghost" id="deleteBtn">Delete</button>' +
-          '<button class="primary" id="requeueBtn">Requeue</button>' +
+          (isReadOnly ? '' :
+            '<button class="danger-ghost" id="deleteBtn">Delete</button>' +
+            '<button class="primary" id="requeueBtn">Requeue</button>') +
         '</div>' +
       '</header>' +
 
@@ -541,30 +543,32 @@
         historyHtml +
       '</div>';
 
-    document.getElementById('requeueBtn').addEventListener('click', async function () {
-      const btn = this;
-      btn.disabled = true;
-      btn.textContent = 'Requeuing…';
-      try {
-        await apiFetch('/axon/jobs/' + encodeURIComponent(job.jobId) + '/retry', { method: 'POST' });
-        await load();
-      } catch (e) {
-        btn.disabled = false;
-        btn.textContent = 'Requeue';
-      }
-    });
+    if (!isReadOnly) {
+      document.getElementById('requeueBtn').addEventListener('click', async function () {
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Requeuing…';
+        try {
+          await apiFetch('/axon/jobs/' + encodeURIComponent(job.jobId) + '/retry', { method: 'POST' });
+          await load();
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Requeue';
+        }
+      });
 
-    document.getElementById('deleteBtn').addEventListener('click', async function () {
-      if (!window.confirm('Delete this job? This cannot be undone.')) return;
-      const btn = this;
-      btn.disabled = true;
-      try {
-        await apiFetch('/axon/jobs/' + encodeURIComponent(job.jobId), { method: 'DELETE' });
-        window.location.href = '/axon/dashboard';
-      } catch (e) {
-        btn.disabled = false;
-      }
-    });
+      document.getElementById('deleteBtn').addEventListener('click', async function () {
+        if (!window.confirm('Delete this job? This cannot be undone.')) return;
+        const btn = this;
+        btn.disabled = true;
+        try {
+          await apiFetch('/axon/jobs/' + encodeURIComponent(job.jobId), { method: 'DELETE' });
+          window.location.href = '/axon/dashboard';
+        } catch (e) {
+          btn.disabled = false;
+        }
+      });
+    }
 
     const toggleFullTraceBtn = document.getElementById('toggleFullTrace');
     if (toggleFullTraceBtn) {
@@ -614,7 +618,9 @@
     }
   }
 
-  load();
+  apiFetch('/axon/me').then(function (r) { return r.json(); }).then(function (me) {
+    isReadOnly = me.role !== 'Admin';
+  }).catch(function () {}).then(load);
 })();
 </script>
 </body>
