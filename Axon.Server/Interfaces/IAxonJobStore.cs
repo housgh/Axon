@@ -14,4 +14,13 @@ public interface IAxonJobStore
     Task DeleteJob(string id);
     Task<List<JobHistoryEntry>> GetHistory(string jobId);
     Task RecordFailure(string id, string? error);
+
+    /// <summary>Marks a job Processing and records the deadline by which it must be acknowledged.</summary>
+    Task MarkProcessing(string id, long processingDeadline, string? note = null);
+
+    /// <summary>Jobs currently Processing whose deadline has passed (dispatched but never acknowledged).</summary>
+    Task<List<Job>> GetOrphanedProcessingJobs(long asOf);
+
+    /// <summary>Jobs currently Processing on the given device (used to reclaim immediately on disconnect).</summary>
+    Task<List<Job>> GetProcessingJobsForDevice(string deviceName);
 }

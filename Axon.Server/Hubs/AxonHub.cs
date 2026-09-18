@@ -1,4 +1,5 @@
 using Axon.Core.Models;
+using Axon.Server.Interfaces;
 using Axon.Server.Services;
 using Microsoft.AspNetCore.SignalR;
 
@@ -7,7 +8,8 @@ namespace Axon.Server.Hubs;
 public class AxonHub(
     IAxonJobService jobService,
     IAxonRecurringJobService recurringJobService,
-    IDeviceConnectionRegistry deviceRegistry) : Hub<AxonHub>
+    IDeviceConnectionRegistry deviceRegistry,
+    IAxonJobStore jobStore) : Hub<AxonHub>
 {
 
     public override Task OnConnectedAsync()
@@ -49,10 +51,22 @@ public class AxonHub(
         return jobService.MarkFailedAsync(jobId, error);
     }
 
-    public override Task OnDisconnectedAsync(Exception? exception)
+    public override async Task OnDisconnectedAsync(Exception? exception)
     {
         Console.WriteLine($"OnDisconnectedAsync called {Context.ConnectionId}");
+
+        var deviceName = deviceRegistry.GetDeviceName(Context.ConnectionId);
         deviceRegistry.Unregister(Context.ConnectionId);
-        return Task.CompletedTask;
+
+        // Any job this device was actively processing can no longer be acknowledged on this
+        // connection; reclaim it immediately instead of waiting for the processing deadline.
+        if (deviceName is not null)
+        {
+            var stranded = await jobStore.GetProcessingJobsForDevice(deviceName);
+            foreach (var job in stranded)
+            {
+                await jobService.ReclaimOrphanedAsync(job);
+            }
+        }
     }
 }

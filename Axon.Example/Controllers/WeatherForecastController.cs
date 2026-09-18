@@ -28,6 +28,7 @@ public class WeatherForecastController(IAxonClient axonClient) : ControllerBase
         var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.AlwaysThrows());
         return Ok(new { JobId = jobId });
     }
+
 }
 
 public class MyClass

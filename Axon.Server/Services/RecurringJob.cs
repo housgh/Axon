@@ -4,6 +4,11 @@ namespace Axon.Server.Services;
 
 public class RecurringJob : JobInfo
 {
+    // See Job() in AxonJobProcessor.cs: required for Dapper/reflection-based materialization.
+    public RecurringJob()
+    {
+    }
+
     public RecurringJob(JobInfo jobInfo)
     {
         Arguments = jobInfo.Arguments;

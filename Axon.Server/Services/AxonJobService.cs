@@ -9,6 +9,7 @@ public interface IAxonJobService
     Task EnqueueAsync(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor);
     Task MarkSucceededAsync(string jobId);
     Task MarkFailedAsync(string jobId, string? error = null);
+    Task ReclaimOrphanedAsync(Job job);
 }
 
 public class AxonJobService(IAxonJobStore jobStore) : IAxonJobService
@@ -42,17 +43,27 @@ public class AxonJobService(IAxonJobStore jobStore) : IAxonJobService
         if (job is null) return;
 
         await jobStore.RecordFailure(jobId, error);
+        await RetryOrFailAsync(job);
+    }
 
+    public async Task ReclaimOrphanedAsync(Job job)
+    {
+        await jobStore.RecordFailure(job.JobId, "Job orphaned: dispatched but never acknowledged (device disconnected or timed out)");
+        await RetryOrFailAsync(job);
+    }
+
+    private async Task RetryOrFailAsync(Job job)
+    {
         // job.Attempts counts attempts already made (this failure included once RequeueForRetry
         // runs), so retry only while at least one more attempt would still fit under MaxAttempts.
         if (job.Attempts + 1 < job.MaxAttempts)
         {
             var backoff = RetryBackoff[Math.Min(job.Attempts, RetryBackoff.Length - 1)];
-            await jobStore.RequeueForRetry(jobId, DateTime.UtcNow.Add(backoff).Ticks, $"Retrying in {backoff}");
+            await jobStore.RequeueForRetry(job.JobId, DateTime.UtcNow.Add(backoff).Ticks, $"Retrying in {backoff}");
         }
         else
         {
-            await jobStore.UpdateState(jobId, JobState.Failed);
+            await jobStore.UpdateState(job.JobId, JobState.Failed);
         }
     }
 }

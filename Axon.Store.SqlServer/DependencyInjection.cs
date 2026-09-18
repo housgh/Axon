@@ -11,5 +11,6 @@ public static class DependencyInjection
     public static void AddAxonSqlServerStore(this IServiceCollection services, string connectionString)
     {
         services.Replace(ServiceDescriptor.Singleton<IAxonJobStore>(_ => new AxonSqlServerStore(connectionString)));
+        services.Replace(ServiceDescriptor.Singleton<IAxonRecurringJobStore>(_ => new AxonSqlServerRecurringJobStore(connectionString)));
     }
 }

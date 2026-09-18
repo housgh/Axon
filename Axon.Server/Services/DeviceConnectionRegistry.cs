@@ -7,6 +7,7 @@ public interface IDeviceConnectionRegistry
     void Register(string deviceName, string connectionId);
     void Unregister(string connectionId);
     string? GetConnectionId(string deviceName);
+    string? GetDeviceName(string connectionId);
 }
 
 public class DeviceConnectionRegistry : IDeviceConnectionRegistry
@@ -32,5 +33,17 @@ public class DeviceConnectionRegistry : IDeviceConnectionRegistry
     public string? GetConnectionId(string deviceName)
     {
         return _deviceToConnection.GetValueOrDefault(deviceName);
+    }
+
+    public string? GetDeviceName(string connectionId)
+    {
+        foreach (var pair in _deviceToConnection)
+        {
+            if (pair.Value == connectionId)
+            {
+                return pair.Key;
+            }
+        }
+        return null;
     }
 }
