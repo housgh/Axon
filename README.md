@@ -9,7 +9,7 @@ Axon.Server acts purely as a scheduler/dispatcher — it never executes your job
 **Transport:** dispatch uses [SignalR](https://learn.microsoft.com/aspnet/core/signalr/introduction) over WebSockets — each `Axon.Client` opens one long-lived WebSocket connection to `Axon.Server` (with automatic reconnect) and the server pushes jobs down that connection as they become due, rather than clients polling for work. This means:
 - Both ends need a network path that allows WebSocket upgrades (most reverse proxies/load balancers need this enabled explicitly).
 - A client only receives jobs while its connection is open; if it disconnects, dispatched-but-unacknowledged jobs are reclaimed and retried (see [docs/architecture.md](docs/architecture.md)) rather than lost.
-- Running `Axon.Server` behind multiple instances requires a backplane (e.g. `AddSignalR().AddStackExchangeRedis(...)`) or sticky sessions, since a client's WebSocket is pinned to whichever server instance accepted it. Dispatch itself is safe across instances sharing `Axon.Store.SqlServer` — each instance atomically claims a job before dispatching it (see [docs/architecture.md](docs/architecture.md#multi-instance-dispatch-safety)), so at most one instance ever dispatches a given job even if several see it as due in the same poll cycle. The backplane requirement is specifically about routing a client's *inbound* WebSocket traffic to the right instance, not about dispatch correctness.
+- Running `Axon.Server` behind multiple instances requires a backplane (`Axon.Server.Redis`, see below) or sticky sessions, since a client's WebSocket is pinned to whichever server instance accepted it. Dispatch itself is safe across instances sharing `Axon.Store.SqlServer` — each instance atomically claims a job before dispatching it (see [docs/architecture.md](docs/architecture.md#multi-instance-dispatch-safety)), so at most one instance ever dispatches a given job even if several see it as due in the same poll cycle. The backplane requirement is specifically about routing a client's *inbound* WebSocket traffic to the right instance, not about dispatch correctness.
 
 ## Packages
 
@@ -19,6 +19,7 @@ Axon.Server acts purely as a scheduler/dispatcher — it never executes your job
 | `Axon.Client` | Enqueue jobs, schedule recurring jobs, and execute dispatched jobs inside your service. |
 | `Axon.Server` | The scheduler/dispatcher: SignalR hub, job store, background processors, and an admin dashboard. |
 | `Axon.Store.SqlServer` | SQL Server-backed persistence for `Axon.Server` (in-memory storage is used by default). |
+| `Axon.Server.Redis` | Redis SignalR backplane for `Axon.Server`, so job dispatch and dashboard push reach clients connected to any instance behind a load balancer. Optional, separate package so `Axon.Server` itself doesn't carry a Redis dependency; other backplane options may be added as their own packages later. |
 
 ## Installation
 
@@ -33,6 +34,12 @@ Add `Axon.Store.SqlServer` if you want job/recurring-job state to survive a rest
 
 ```bash
 dotnet add package Axon.Store.SqlServer
+```
+
+Add `Axon.Server.Redis` if you're running more than one `Axon.Server` instance behind a load balancer:
+
+```bash
+dotnet add package Axon.Server.Redis
 ```
 
 ## Usage
@@ -88,7 +95,19 @@ if (!string.IsNullOrEmpty(sqlConnectionString))
 }
 ```
 
-### 3. Register the client
+### 3. (Optional) Register the Redis backplane
+
+If you're running multiple `Axon.Server` instances behind a load balancer, chain `.AddRedisBackplane(...)` off `AddAxonServer()` so job dispatch and dashboard updates reach a client no matter which instance's WebSocket it's connected to:
+
+```csharp
+builder.Services.AddAxonServer()
+    .AddRedisBackplane(builder.Configuration["Axon:RedisConnectionString"]!)
+    .AddAxonDashboard();
+```
+
+Without this, a client's connection is pinned to whichever instance accepted it, so a job dispatched by instance A never reaches a client connected to instance B, and the dashboard's Servers/Clients tabs only ever show what's local to the instance serving that request (see below).
+
+### 4. Register the client
 
 Point the client at wherever `Axon.Server` is hosted (its own process, or a different microservice's address). This opens the SignalR/WebSocket connection (`/hubs/axon`) that the server dispatches jobs over:
 
@@ -96,7 +115,7 @@ Point the client at wherever `Axon.Server` is hosted (its own process, or a diff
 builder.Services.AddAxonClient(axonBaseUrl); // e.g. "https://localhost:7221"
 ```
 
-### 4. Map the server middleware and dashboard
+### 5. Map the server middleware and dashboard
 
 ```csharp
 app.UseAxonServer();
@@ -104,7 +123,7 @@ app.UseAxonServer();
 
 This maps the SignalR hub (`/hubs/axon`) and, if opted into in step 1, the `/axon` API/dashboard.
 
-### 5. Enqueue, schedule, and run recurring jobs
+### 6. Enqueue, schedule, and run recurring jobs
 
 Inject `IAxonClient` and call methods on any plain class — Axon serializes the method call as an expression tree, sends it to the server, and the server dispatches it back to a connected client for execution:
 
@@ -145,13 +164,13 @@ await axonClient.AddOrUpdateRecurringAsync<MyClass>(
 await axonClient.RemoveRecurringAsync("hourly-hello");
 ```
 
-### 6. Open the dashboard
+### 7. Open the dashboard
 
 Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password. The dashboard is organized into four tabs:
 - **Jobs** — job history, state, retry/delete.
 - **Recurring jobs** — schedules, last/next run, trigger/remove.
 - **Servers** — active `Axon.Server` instances, each heartbeating every 15s and shown offline once its heartbeat is more than 45s old. With the default in-memory store an instance only ever sees itself; use `Axon.Store.SqlServer` to see every instance behind a multi-instance deployment.
-- **Clients** — devices with an open connection to *this* server instance (a SignalR connection is pinned to whichever instance accepted it, so this is always instance-local, regardless of storage backend), shown Idle or Processing depending on whether a job is currently dispatched to them.
+- **Clients** — devices with an open connection to *this* server instance (a SignalR connection is pinned to whichever instance accepted it, so this list is always instance-local regardless of storage backend or backplane — `Axon.Server.Redis` makes dispatch/push reach the right client, but each instance still only lists the clients connected to itself), shown Idle or Processing depending on whether a job is currently dispatched to them.
 
 `ReadOnly` users see the same data but without retry/delete/trigger controls.
 

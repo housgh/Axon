@@ -172,8 +172,16 @@ public static class DependencyInjection
 
     public static void UseAxonServer(this WebApplication app)
     {
-        app.UseAuthentication();
-        app.UseAuthorization();
+        // Only wire the auth middleware if .AddAuthentication(...) was actually chained: it's what
+        // registers IAuthenticationSchemeProvider, and calling UseAuthentication() without it
+        // throws at startup - which would otherwise make the documented "auth is opt-in" default
+        // crash instead of just serving an open dashboard.
+        var authConfigured = app.Services.GetService<DashboardAuthOptions>() is not null;
+        if (authConfigured)
+        {
+            app.UseAuthentication();
+            app.UseAuthorization();
+        }
 
         app.MapHub<AxonHub>("/hubs/axon");
 

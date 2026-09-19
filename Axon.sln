@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Tests.Unit", "tests\Ax
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Tests.Integration", "tests\Axon.Tests.Integration\Axon.Tests.Integration.csproj", "{4105353D-7355-4071-ADAE-F3E1B910325C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Server.Redis", "Axon.Server.Redis\Axon.Server.Redis.csproj", "{74077A89-5A97-4F7E-BCED-7BA33B2EDE4D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -61,6 +63,10 @@ Global
 		{4105353D-7355-4071-ADAE-F3E1B910325C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4105353D-7355-4071-ADAE-F3E1B910325C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4105353D-7355-4071-ADAE-F3E1B910325C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{74077A89-5A97-4F7E-BCED-7BA33B2EDE4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{74077A89-5A97-4F7E-BCED-7BA33B2EDE4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{74077A89-5A97-4F7E-BCED-7BA33B2EDE4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{74077A89-5A97-4F7E-BCED-7BA33B2EDE4D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{6824AFFA-1898-4FF9-A784-EA27B613BD28} = {7D34D4F5-61E1-465C-BA77-E01FF3948998}

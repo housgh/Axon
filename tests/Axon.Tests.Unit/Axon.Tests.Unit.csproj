@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="FluentAssertions" Version="7.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="NSubstitute" Version="6.2.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
@@ -25,6 +26,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Axon.Server\Axon.Server.csproj" />
     <ProjectReference Include="..\..\Axon.Core\Axon.Core.csproj" />
+    <ProjectReference Include="..\..\Axon.Server.Redis\Axon.Server.Redis.csproj" />
   </ItemGroup>
 
 </Project>
