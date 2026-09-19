@@ -63,12 +63,23 @@ public class AxonJobProcessor(
 
             try
             {
-                // Mark Processing before dispatch, not after: SendCoreAsync can hand off to a
-                // client that executes and calls back OnSuccess before this method continues, and
-                // if MarkProcessing then runs afterward it clobbers that Succeeded state back to
+                // Claim before dispatch, not after: SendCoreAsync can hand off to a client that
+                // executes and calls back OnSuccess before this method continues, and if the
+                // claim then landed afterward it would clobber that Succeeded state back to
                 // Processing, permanently stranding an already-completed job.
+                //
+                // The claim is also atomic (TryClaimJob only succeeds if the job is still
+                // Enqueued/Scheduled), which is what makes it safe for multiple Axon.Server
+                // instances to poll the same SQL-backed job store concurrently: at most one
+                // instance's claim can succeed for a given job, so at most one instance ever
+                // dispatches it.
                 var deadline = DateTime.UtcNow.Add(ProcessingTimeout).Ticks;
-                await jobStore.MarkProcessing(job.JobId, deadline, $"Dispatched to {job.DeviceName}");
+                var claimed = await jobStore.TryClaimJob(job.JobId, deadline, $"Dispatched to {job.DeviceName}");
+                if (!claimed)
+                {
+                    // Another instance (or another poll cycle) already claimed this job.
+                    continue;
+                }
                 await notifier.JobsChanged();
                 await hubContext.Clients.Client(connectionId)
                     .SendCoreAsync("Invoke", [job.JobId, job], stoppingToken);

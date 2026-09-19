@@ -167,20 +167,38 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         return (await conn.QueryAsync<JobHistoryEntry>(sql, new { JobId = jobId })).ToList();
     }
 
-    public async Task MarkProcessing(string id, long processingDeadline, string? note = null)
+    public async Task<bool> TryClaimJob(string id, long processingDeadline, string? note = null)
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
         await using var tx = await conn.BeginTransactionAsync();
 
+        // The State IN (...) guard is what makes this an atomic claim rather than a plain
+        // update: SQL Server holds the row lock for the duration of this UPDATE, so if two
+        // server instances race to claim the same job, only one UPDATE can match and affect a
+        // row - the other sees 0 rows affected and must not dispatch.
         const string sql = @"
             UPDATE Jobs
             SET State = @State, ProcessingDeadline = @ProcessingDeadline
-            WHERE JobId = @Id AND IsDeleted = 0";
-        await conn.ExecuteAsync(sql, new { Id = id, State = (int)JobState.Processing, ProcessingDeadline = processingDeadline }, tx);
-        await AppendHistory(conn, tx, id, JobState.Processing, note);
+            WHERE JobId = @Id AND IsDeleted = 0 AND State IN (@Enqueued, @Scheduled)";
+        var rowsAffected = await conn.ExecuteAsync(sql, new
+        {
+            Id = id,
+            State = (int)JobState.Processing,
+            ProcessingDeadline = processingDeadline,
+            Enqueued = (int)JobState.Enqueued,
+            Scheduled = (int)JobState.Scheduled
+        }, tx);
 
+        if (rowsAffected == 0)
+        {
+            await tx.RollbackAsync();
+            return false;
+        }
+
+        await AppendHistory(conn, tx, id, JobState.Processing, note);
         await tx.CommitAsync();
+        return true;
     }
 
     public async Task<List<Job>> GetOrphanedProcessingJobs(long asOf)

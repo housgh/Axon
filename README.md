@@ -7,7 +7,7 @@ Axon.Server acts purely as a scheduler/dispatcher — it never executes your job
 **Transport:** dispatch uses [SignalR](https://learn.microsoft.com/aspnet/core/signalr/introduction) over WebSockets — each `Axon.Client` opens one long-lived WebSocket connection to `Axon.Server` (with automatic reconnect) and the server pushes jobs down that connection as they become due, rather than clients polling for work. This means:
 - Both ends need a network path that allows WebSocket upgrades (most reverse proxies/load balancers need this enabled explicitly).
 - A client only receives jobs while its connection is open; if it disconnects, dispatched-but-unacknowledged jobs are reclaimed and retried (see [docs/architecture.md](docs/architecture.md)) rather than lost.
-- Running `Axon.Server` behind multiple instances requires a backplane (e.g. `AddSignalR().AddStackExchangeRedis(...)`) or sticky sessions, since a client's WebSocket is pinned to whichever server instance accepted it.
+- Running `Axon.Server` behind multiple instances requires a backplane (e.g. `AddSignalR().AddStackExchangeRedis(...)`) or sticky sessions, since a client's WebSocket is pinned to whichever server instance accepted it. Dispatch itself is safe across instances sharing `Axon.Store.SqlServer` — each instance atomically claims a job before dispatching it (see [docs/architecture.md](docs/architecture.md#multi-instance-dispatch-safety)), so at most one instance ever dispatches a given job even if several see it as due in the same poll cycle. The backplane requirement is specifically about routing a client's *inbound* WebSocket traffic to the right instance, not about dispatch correctness.
 
 ## Packages
 

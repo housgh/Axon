@@ -15,8 +15,14 @@ public interface IAxonJobStore
     Task<List<JobHistoryEntry>> GetHistory(string jobId);
     Task RecordFailure(string id, string? error);
 
-    /// <summary>Marks a job Processing and records the deadline by which it must be acknowledged.</summary>
-    Task MarkProcessing(string id, long processingDeadline, string? note = null);
+    /// <summary>
+    /// Atomically claims a job for dispatch: marks it Processing and records the deadline by
+    /// which it must be acknowledged, but only if it is still Enqueued or Scheduled. Returns
+    /// false without making any change if another server instance already claimed it first -
+    /// callers must not dispatch the job when this returns false. This is what makes concurrent
+    /// dispatch safe across multiple Axon.Server instances sharing one SQL store.
+    /// </summary>
+    Task<bool> TryClaimJob(string id, long processingDeadline, string? note = null);
 
     /// <summary>Jobs currently Processing whose deadline has passed (dispatched but never acknowledged).</summary>
     Task<List<Job>> GetOrphanedProcessingJobs(long asOf);

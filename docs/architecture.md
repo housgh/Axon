@@ -13,8 +13,9 @@ sequenceDiagram
     API->>Store: AddJob (State=Enqueued)
     Note over Processor: polls every 5s
 
-    Processor->>Store: MarkProcessing(jobId, deadline)
-    Note over Processor,Store: State set to Processing BEFORE dispatch,<br/>so a fast client ack can never race ahead of it
+    Processor->>Store: TryClaimJob(jobId, deadline)
+    Note over Processor,Store: Atomic claim (State was Enqueued/Scheduled -> Processing).<br/>Runs BEFORE dispatch so a fast client ack can never race ahead of it,<br/>and returns false if another Axon.Server instance already claimed this job.
+    Processor->>Processor: claimed == false? skip dispatch, leave job for next poll
     Processor->>Hub: SendCoreAsync("Invoke", job)
     Hub->>Client: Invoke(jobId, job)
     Client->>Client: execute method body
@@ -27,6 +28,20 @@ sequenceDiagram
         Hub->>Store: RecordFailure + retry-or-fail
     end
 ```
+
+## Multi-instance dispatch safety
+
+Every `AxonJobProcessor` instance (one per `Axon.Server` process) independently polls for due jobs. With `Axon.Store.SqlServer` shared across multiple instances, more than one instance can see the same job as due in the same poll cycle. `TryClaimJob` makes only one of them win:
+
+```mermaid
+flowchart TD
+    A[Instance A: job due] --> C{"UPDATE Jobs SET State=Processing<br/>WHERE JobId=@id AND State IN (Enqueued, Scheduled)"}
+    B[Instance B: same job, same cycle] --> C
+    C -->|1 row affected| W[Winner: dispatches the job]
+    C -->|0 rows affected| L[Loser: skips, leaves job for next poll]
+```
+
+The `WHERE State IN (...)` guard is enforced by SQL Server's row lock for the duration of the `UPDATE`, so exactly one instance's statement can match and affect a row even under truly concurrent execution - the other gets `0` rows affected and must not dispatch. The in-memory store enforces the same guarantee under its own lock, so behavior is consistent regardless of backend (though the in-memory store is inherently single-instance, since nothing shares its state across processes).
 
 ## Job state machine
 

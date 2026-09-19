@@ -115,19 +115,21 @@ public class InMemoryAxonJobStore : IAxonJobStore
         return Task.CompletedTask;
     }
 
-    public Task MarkProcessing(string id, long processingDeadline, string? note = null)
+    public Task<bool> TryClaimJob(string id, long processingDeadline, string? note = null)
     {
         lock (_lock)
         {
             var job = _jobs.FirstOrDefault(j => j.JobId == id);
-            if (job is not null)
+            if (job is null || (job.State != JobState.Enqueued && job.State != JobState.Scheduled))
             {
-                job.State = JobState.Processing;
-                job.ProcessingDeadline = processingDeadline;
-                AppendHistory(id, JobState.Processing, note);
+                return Task.FromResult(false);
             }
+
+            job.State = JobState.Processing;
+            job.ProcessingDeadline = processingDeadline;
+            AppendHistory(id, JobState.Processing, note);
+            return Task.FromResult(true);
         }
-        return Task.CompletedTask;
     }
 
     public Task<List<Job>> GetOrphanedProcessingJobs(long asOf)
