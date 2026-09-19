@@ -2,9 +2,9 @@
 
 <img src="axon.png" alt="Axon logo" width="160" />
 
-A lightweight, Hangfire-style background job scheduler for .NET microservices, with one key difference: **the job scheduler and the job's implementation don't have to live in the same codebase.**
+A lightweight background job scheduler for .NET microservices, built around one key idea: **the job scheduler and the job's implementation don't have to live in the same codebase.**
 
-Axon.Server acts purely as a scheduler/dispatcher — it never executes your job code. Each microservice runs an Axon.Client that both enqueues jobs (to run on itself, later) and executes them when the server dispatches them back over a persistent connection. This makes Axon a good fit for RPC-style architectures where Hangfire's "storage + workers share one deployable" model doesn't apply.
+Axon.Server acts purely as a scheduler/dispatcher — it never executes your job code. Each microservice runs an Axon.Client that both enqueues jobs (to run on itself, later) and executes them when the server dispatches them back over a persistent connection. This makes Axon a good fit for RPC-style architectures where the scheduler and the workers that run jobs aren't part of the same deployable.
 
 **Transport:** dispatch uses [SignalR](https://learn.microsoft.com/aspnet/core/signalr/introduction) over WebSockets — each `Axon.Client` opens one long-lived WebSocket connection to `Axon.Server` (with automatic reconnect) and the server pushes jobs down that connection as they become due, rather than clients polling for work. This means:
 - Both ends need a network path that allows WebSocket upgrades (most reverse proxies/load balancers need this enabled explicitly).
