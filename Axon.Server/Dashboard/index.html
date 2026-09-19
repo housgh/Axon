@@ -250,6 +250,8 @@
   .dot.processing { background: var(--warning); }
   .dot.succeeded { background: var(--success); }
   .dot.failed { background: var(--danger); }
+  .dot.awaiting-parent { background: var(--neutral); }
+  .dot.skipped { background: var(--text-faint); }
 
   .panel {
     background: var(--surface);
@@ -393,6 +395,8 @@
   .badge.processing { background: var(--warning-soft); color: var(--warning); }
   .badge.succeeded { background: var(--success-soft); color: var(--success); }
   .badge.failed { background: var(--danger-soft); color: var(--danger); }
+  .badge.awaiting-parent { background: var(--neutral-soft); color: var(--neutral); }
+  .badge.skipped { background: var(--neutral-soft); color: var(--text-faint); }
 
   .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
@@ -570,6 +574,8 @@
             <option value="2">Processing</option>
             <option value="3">Succeeded</option>
             <option value="4">Failed</option>
+            <option value="5">Awaiting parent</option>
+            <option value="6">Skipped</option>
           </select>
           <select id="pageSize">
             <option value="10">10 / page</option>
@@ -746,8 +752,8 @@
     });
   });
 
-  const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed'];
-  const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed'];
+  const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed', 'Awaiting parent', 'Skipped'];
+  const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed', 'awaiting-parent', 'skipped'];
   let isReadOnly = false;
 
   const state = {

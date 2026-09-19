@@ -34,6 +34,13 @@ public class AxonHub(
         await jobService.EnqueueAsync(deviceName, jobId, jobInfo, scheduledFor);
     }
 
+    public async Task EnqueueContinuation(string deviceName, string jobId, JobInfo jobInfo, string parentJobId, bool continueOnParentFailure)
+    {
+        deviceRegistry.Register(deviceName, Context.ConnectionId);
+        await notifier.ClientsChanged();
+        await jobService.EnqueueContinuationAsync(deviceName, jobId, jobInfo, parentJobId, continueOnParentFailure);
+    }
+
     public async Task AddOrUpdateRecurring(string deviceName, string recurringJobId, JobInfo jobInfo, string cronExpression)
     {
         deviceRegistry.Register(deviceName, Context.ConnectionId);

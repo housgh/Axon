@@ -15,7 +15,9 @@ internal static class JobFactory
         long? scheduledFor = null,
         AxonRetryPolicy? retryPolicy = null,
         string? concurrencyKey = null,
-        int? maxConcurrent = null) =>
+        int? maxConcurrent = null,
+        string? parentJobId = null,
+        bool continueOnParentFailure = false) =>
         new(new JobInfo
         {
             MethodName = "DoWork",
@@ -32,6 +34,8 @@ internal static class JobFactory
             State = state,
             Attempts = attempts,
             MaxAttempts = maxAttempts,
-            ScheduledFor = scheduledFor
+            ScheduledFor = scheduledFor,
+            ParentJobId = parentJobId,
+            ContinueOnParentFailure = continueOnParentFailure
         };
 }

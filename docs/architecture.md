@@ -56,7 +56,14 @@ stateDiagram-v2
     Processing --> Failed: OnFail / orphaned, attempts >= max
     Succeeded --> [*]
     Failed --> [*]
+
+    [*] --> AwaitingParent: ContinueWithAsync
+    AwaitingParent --> Enqueued: parent Succeeded, or parent Failed with ContinueOnParentFailure
+    AwaitingParent --> Skipped: parent Failed, ContinueOnParentFailure = false (default)
+    Skipped --> [*]
 ```
+
+A continuation job (created via `ContinueWithAsync`) starts in `AwaitingParent` instead of `Enqueued`/`Scheduled`, so `AxonJobProcessor`'s poll loop never picks it up for dispatch until it's promoted. The parent's `MarkSucceededAsync`/terminal `MarkFailedAsync` path resolves every job waiting on it (`IAxonJobStore.GetContinuationsWaitingOn`) the moment the parent reaches Succeeded or Failed - including immediately, if the parent had already finished by the time the continuation was created.
 
 ## Orphan reclaim (crash / disconnect recovery)
 

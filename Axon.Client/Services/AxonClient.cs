@@ -14,6 +14,16 @@ public interface IAxonClient
     Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
     Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
     Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+
+    /// <summary>
+    /// Enqueues a job that only runs after <paramref name="parentJobId"/> reaches a terminal
+    /// state: promoted on the parent's success, or on the parent's failure only if
+    /// <paramref name="continueOnParentFailure"/> is true (default false - the continuation is
+    /// left permanently unscheduled if the parent fails).
+    /// </summary>
+    Task<string> ContinueWithAsync(string parentJobId, Expression<Action> methodCall, bool continueOnParentFailure = false, AxonRetryPolicy? retryPolicy = null);
+    Task<string> ContinueWithAsync<TType>(string parentJobId, Expression<Action<TType>> methodCall, bool continueOnParentFailure = false, AxonRetryPolicy? retryPolicy = null);
+
     Task AddOrUpdateRecurringAsync(string recurringJobId, string cronExpression, Expression<Action> methodCall);
     Task AddOrUpdateRecurringAsync<TType>(string recurringJobId, string cronExpression, Expression<Action<TType>> methodCall);
     Task RemoveRecurringAsync(string recurringJobId);
@@ -58,6 +68,12 @@ internal class AxonClient : IAxonClient
     public Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null) =>
         EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy, concurrencyKey, maxConcurrent), scheduledFor);
 
+    public Task<string> ContinueWithAsync(string parentJobId, Expression<Action> methodCall, bool continueOnParentFailure = false, AxonRetryPolicy? retryPolicy = null) =>
+        ContinueWithInternalAsync(parentJobId, GetJobInfo(methodCall, retryPolicy, null, null), continueOnParentFailure);
+
+    public Task<string> ContinueWithAsync<TType>(string parentJobId, Expression<Action<TType>> methodCall, bool continueOnParentFailure = false, AxonRetryPolicy? retryPolicy = null) =>
+        ContinueWithInternalAsync(parentJobId, GetJobInfo(methodCall, retryPolicy, null, null), continueOnParentFailure);
+
     public Task AddOrUpdateRecurringAsync(string recurringJobId, string cronExpression, Expression<Action> methodCall) =>
         AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null, null, null));
 
@@ -82,6 +98,17 @@ internal class AxonClient : IAxonClient
 
         var jobId = Guid.NewGuid().ToString();
         await _hubConnection.InvokeAsync("Enqueue", _deviceName, jobId, jobInfo, scheduledFor?.UtcTicks);
+
+        return jobId;
+    }
+
+    private async Task<string> ContinueWithInternalAsync(string parentJobId, JobInfo? jobInfo, bool continueOnParentFailure)
+    {
+        if (jobInfo is null)
+            throw new InvalidOperationException("Invalid method provided.");
+
+        var jobId = Guid.NewGuid().ToString();
+        await _hubConnection.InvokeAsync("EnqueueContinuation", _deviceName, jobId, jobInfo, parentJobId, continueOnParentFailure);
 
         return jobId;
     }

@@ -20,6 +20,8 @@ BEGIN
         RetryPolicy       NVARCHAR(MAX) NULL,
         ConcurrencyKey    NVARCHAR(256) NULL,
         MaxConcurrent     INT        NULL,
+        ParentJobId       NVARCHAR(64) NULL,
+        ContinueOnParentFailure BIT  NOT NULL DEFAULT 0,
         IsDeleted         BIT        NOT NULL DEFAULT 0
     );
 
@@ -67,6 +69,24 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('Jobs') AND name = 'IX_Jobs_ConcurrencyKey_State')
 BEGIN
     CREATE INDEX IX_Jobs_ConcurrencyKey_State ON Jobs (ConcurrencyKey, State) WHERE IsDeleted = 0 AND ConcurrencyKey IS NOT NULL;
+END
+
+-- Continuations: ParentJobId identifies the job this one waits on (State = AwaitingParent until
+-- promoted); ContinueOnParentFailure controls whether the continuation still runs if the parent
+-- ends in Failed (default: no, it goes to Skipped instead).
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'ParentJobId')
+BEGIN
+    ALTER TABLE Jobs ADD ParentJobId NVARCHAR(64) NULL;
+END
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'ContinueOnParentFailure')
+BEGIN
+    ALTER TABLE Jobs ADD ContinueOnParentFailure BIT NOT NULL DEFAULT 0;
+END
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('Jobs') AND name = 'IX_Jobs_ParentJobId')
+BEGIN
+    CREATE INDEX IX_Jobs_ParentJobId ON Jobs (ParentJobId) WHERE IsDeleted = 0 AND ParentJobId IS NOT NULL;
 END
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'JobHistory')

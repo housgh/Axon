@@ -17,6 +17,10 @@ public class AxonJobServiceTests
     public AxonJobServiceTests()
     {
         _sut = new AxonJobService(_jobStore, _notifier);
+        // Every terminal-state transition (success, or the final failure) now checks for waiting
+        // continuations; default to none so tests unrelated to continuations don't each need to
+        // stub this individually.
+        _jobStore.GetContinuationsWaitingOn(Arg.Any<string>()).Returns([]);
     }
 
     [Fact]
@@ -201,5 +205,107 @@ public class AxonJobServiceTests
         await _jobStore.Received(1).RequeueForRetry("job-1",
             Arg.Is<long>(scheduledFor => new DateTime(scheduledFor) >= before.AddSeconds(50) && new DateTime(scheduledFor) < before.AddSeconds(60)),
             Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task EnqueueContinuationAsync_AddsJobInAwaitingParentState()
+    {
+        var jobInfo = new JobInfo { MethodName = "M", Assembly = "A", DeclaringType = "T", Arguments = [] };
+
+        await _sut.EnqueueContinuationAsync("device-1", "job-2", jobInfo, "job-1", continueOnParentFailure: false);
+
+        await _jobStore.Received(1).AddJob(Arg.Is<Job>(j =>
+            j.JobId == "job-2" &&
+            j.State == JobState.AwaitingParent &&
+            j.ParentJobId == "job-1" &&
+            j.ContinueOnParentFailure == false));
+    }
+
+    [Fact]
+    public async Task EnqueueContinuationAsync_ParentAlreadySucceeded_PromotesImmediately()
+    {
+        // The parent may finish before the continuation is even created; it must not be left
+        // waiting forever for a transition that already happened. In a real store, GetJob and
+        // GetContinuationsWaitingOn would both reflect the AddJob call above; stub both here since
+        // the mock doesn't persist state between calls.
+        var jobInfo = new JobInfo { MethodName = "M", Assembly = "A", DeclaringType = "T", Arguments = [] };
+        _jobStore.GetJob("job-1").Returns(JobFactory.CreateJob("job-1", state: JobState.Succeeded));
+        var continuation = JobFactory.CreateJob("job-2", state: JobState.AwaitingParent);
+        continuation.ParentJobId = "job-1";
+        _jobStore.GetContinuationsWaitingOn("job-1").Returns([continuation]);
+
+        await _sut.EnqueueContinuationAsync("device-1", "job-2", jobInfo, "job-1", continueOnParentFailure: false);
+
+        await _jobStore.Received(1).Requeue("job-2", Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task EnqueueContinuationAsync_ParentStillRunning_LeavesContinuationWaiting()
+    {
+        var jobInfo = new JobInfo { MethodName = "M", Assembly = "A", DeclaringType = "T", Arguments = [] };
+        _jobStore.GetJob("job-1").Returns(JobFactory.CreateJob("job-1", state: JobState.Processing));
+
+        await _sut.EnqueueContinuationAsync("device-1", "job-2", jobInfo, "job-1", continueOnParentFailure: false);
+
+        await _jobStore.DidNotReceive().Requeue(Arg.Any<string>(), Arg.Any<string>());
+        await _jobStore.DidNotReceive().UpdateState("job-2", JobState.Skipped, Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task MarkSucceededAsync_PromotesWaitingContinuation()
+    {
+        _jobStore.GetJob("job-1").Returns(JobFactory.CreateJob("job-1", state: JobState.Succeeded));
+        var continuation = JobFactory.CreateJob("job-2", state: JobState.AwaitingParent);
+        continuation.ParentJobId = "job-1";
+        _jobStore.GetContinuationsWaitingOn("job-1").Returns([continuation]);
+
+        await _sut.MarkSucceededAsync("job-1");
+
+        await _jobStore.Received(1).Requeue("job-2", Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task MarkFailedAsync_TerminalFailure_SkipsContinuationByDefault()
+    {
+        var job = JobFactory.CreateJob("job-1", state: JobState.Processing, attempts: 2, maxAttempts: 3);
+        _jobStore.GetJob("job-1").Returns(job);
+        var continuation = JobFactory.CreateJob("job-2", state: JobState.AwaitingParent);
+        continuation.ParentJobId = "job-1";
+        continuation.ContinueOnParentFailure = false;
+        _jobStore.GetContinuationsWaitingOn("job-1").Returns([continuation]);
+
+        await _sut.MarkFailedAsync("job-1", "boom");
+
+        await _jobStore.Received(1).UpdateState("job-2", JobState.Skipped, Arg.Any<string?>());
+        await _jobStore.DidNotReceive().Requeue("job-2", Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task MarkFailedAsync_TerminalFailure_RunsContinuationWhenConfiguredToContinueOnFailure()
+    {
+        var job = JobFactory.CreateJob("job-1", state: JobState.Processing, attempts: 2, maxAttempts: 3);
+        _jobStore.GetJob("job-1").Returns(job);
+        var continuation = JobFactory.CreateJob("job-2", state: JobState.AwaitingParent);
+        continuation.ParentJobId = "job-1";
+        continuation.ContinueOnParentFailure = true;
+        _jobStore.GetContinuationsWaitingOn("job-1").Returns([continuation]);
+
+        await _sut.MarkFailedAsync("job-1", "boom");
+
+        await _jobStore.Received(1).Requeue("job-2", Arg.Any<string>());
+        await _jobStore.DidNotReceive().UpdateState("job-2", JobState.Skipped, Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task MarkFailedAsync_RetryNotYetExhausted_DoesNotResolveContinuationsYet()
+    {
+        // Continuations only resolve once the parent reaches an actual terminal state - a retry
+        // (not yet the final failure) must not prematurely promote or skip anything.
+        var job = JobFactory.CreateJob("job-1", state: JobState.Processing, attempts: 0, maxAttempts: 3);
+        _jobStore.GetJob("job-1").Returns(job);
+
+        await _sut.MarkFailedAsync("job-1", "boom");
+
+        await _jobStore.DidNotReceive().GetContinuationsWaitingOn(Arg.Any<string>());
     }
 }

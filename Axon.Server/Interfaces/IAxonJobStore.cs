@@ -10,7 +10,7 @@ public interface IAxonJobStore
     Task<List<Job>> GetJobs(int skip = 0, int take = 20, JobState[]? states = null);
     Task UpdateState(string id, JobState state, string? note = null);
     Task RequeueForRetry(string id, long scheduledFor, string? note = null);
-    Task Requeue(string id);
+    Task Requeue(string id, string note = "Requeued manually");
     Task DeleteJob(string id);
     Task<List<JobHistoryEntry>> GetHistory(string jobId);
     Task RecordFailure(string id, string? error);
@@ -29,4 +29,7 @@ public interface IAxonJobStore
 
     /// <summary>Jobs currently Processing on the given device (used to reclaim immediately on disconnect).</summary>
     Task<List<Job>> GetProcessingJobsForDevice(string deviceName);
+
+    /// <summary>Continuation jobs (State == AwaitingParent) whose ParentJobId is the given job.</summary>
+    Task<List<Job>> GetContinuationsWaitingOn(string parentJobId);
 }

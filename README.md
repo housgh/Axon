@@ -208,6 +208,21 @@ public class EmailJobs
 
 An explicit `concurrencyKey` argument on `EnqueueAsync`/`ScheduleAsync` always overrides the attribute when both are present.
 
+Chain a job to run only after another one finishes with `ContinueWithAsync`:
+
+```csharp
+var parentJobId = await axonClient.EnqueueAsync<MyClass>(x => x.DownloadReport());
+var childJobId = await axonClient.ContinueWithAsync<MyClass>(parentJobId, x => x.EmailReport());
+```
+
+The continuation sits in an `AwaitingParent` state — not dispatched, not counted against any concurrency limit — until the parent reaches a terminal state. If the parent succeeds, the continuation is promoted to `Enqueued`. If the parent fails (retries exhausted), the continuation is left permanently `Skipped` by default; pass `continueOnParentFailure: true` to run it anyway:
+
+```csharp
+await axonClient.ContinueWithAsync<MyClass>(parentJobId, x => x.CleanUpTempFiles(), continueOnParentFailure: true);
+```
+
+Continuations can be chained (A → B → C): each one only resolves once its own immediate parent finishes. If the parent has already finished by the time `ContinueWithAsync` is called, the continuation resolves immediately rather than waiting for a transition that already happened.
+
 Recurring jobs use standard cron expressions and are idempotent by `recurringJobId` — calling `AddOrUpdateRecurringAsync` again with the same id updates the existing schedule instead of creating a duplicate:
 
 ```csharp

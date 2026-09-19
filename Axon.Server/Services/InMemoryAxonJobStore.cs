@@ -80,7 +80,7 @@ public class InMemoryAxonJobStore : IAxonJobStore
         return Task.CompletedTask;
     }
 
-    public Task Requeue(string id)
+    public Task Requeue(string id, string note = "Requeued manually")
     {
         lock (_lock)
         {
@@ -90,7 +90,7 @@ public class InMemoryAxonJobStore : IAxonJobStore
                 job.Attempts = 0;
                 job.ScheduledFor = null;
                 job.State = JobState.Enqueued;
-                AppendHistory(id, JobState.Enqueued, "Requeued manually");
+                AppendHistory(id, JobState.Enqueued, note);
             }
         }
         return Task.CompletedTask;
@@ -160,6 +160,16 @@ public class InMemoryAxonJobStore : IAxonJobStore
         {
             return Task.FromResult(_jobs
                 .Where(j => j.State == JobState.Processing && j.DeviceName == deviceName)
+                .ToList());
+        }
+    }
+
+    public Task<List<Job>> GetContinuationsWaitingOn(string parentJobId)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(_jobs
+                .Where(j => j.State == JobState.AwaitingParent && j.ParentJobId == parentJobId)
                 .ToList());
         }
     }

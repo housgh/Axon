@@ -161,4 +161,18 @@ public class Job : JobInfo
     /// (dispatched but never acknowledged via OnSuccess/OnFail) and eligible for reclaim.
     /// </summary>
     public long? ProcessingDeadline { get; set; }
+
+    /// <summary>
+    /// If set, this job is a continuation: it starts in <see cref="JobState.AwaitingParent"/> and
+    /// is only promoted to Enqueued once the job identified by ParentJobId reaches a terminal
+    /// state (Succeeded, or Failed with <see cref="ContinueOnParentFailure"/> true).
+    /// </summary>
+    public string? ParentJobId { get; set; }
+
+    /// <summary>
+    /// Only meaningful when <see cref="ParentJobId"/> is set. If the parent ends in Failed: true
+    /// runs the continuation anyway, false (the default) leaves it permanently in
+    /// <see cref="JobState.Skipped"/>.
+    /// </summary>
+    public bool ContinueOnParentFailure { get; set; }
 }

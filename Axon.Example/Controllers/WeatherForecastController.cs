@@ -51,6 +51,14 @@ public class WeatherForecastController(IAxonClient axonClient) : ControllerBase
         return Ok(new { JobId = jobId });
     }
 
+    [HttpGet("continuation-test")]
+    public async Task<IActionResult> ContinuationTest()
+    {
+        var parentJobId = await axonClient.EnqueueAsync<MyClass>(x => x.WriteHelloWorld("Parent job"));
+        var childJobId = await axonClient.ContinueWithAsync<MyClass>(parentJobId, x => x.WriteHelloWorld("Child job (runs after parent succeeds)"));
+        return Ok(new { ParentJobId = parentJobId, ChildJobId = childJobId });
+    }
+
 }
 
 public class MyClass

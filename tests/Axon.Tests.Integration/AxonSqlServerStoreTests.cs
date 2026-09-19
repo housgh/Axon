@@ -59,6 +59,38 @@ public class AxonSqlServerStoreTests(SqlServerFixture fixture)
     }
 
     [Fact]
+    public async Task AddJob_WithContinuationFields_RoundTripsThroughSqlServer()
+    {
+        var sut = CreateSut();
+        var job = JobFactory.CreateJob(state: JobState.AwaitingParent, parentJobId: "parent-123", continueOnParentFailure: true);
+
+        await sut.AddJob(job);
+        var result = await sut.GetJob(job.JobId);
+
+        result!.State.Should().Be(JobState.AwaitingParent);
+        result.ParentJobId.Should().Be("parent-123");
+        result.ContinueOnParentFailure.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetContinuationsWaitingOn_ReturnsOnlyAwaitingParentJobsForThatParent()
+    {
+        var sut = CreateSut();
+        var parentId = Guid.NewGuid().ToString();
+        var otherParentId = Guid.NewGuid().ToString();
+        var waiting = JobFactory.CreateJob(state: JobState.AwaitingParent, parentJobId: parentId);
+        var alreadyPromoted = JobFactory.CreateJob(state: JobState.Enqueued, parentJobId: parentId);
+        var waitingOnOther = JobFactory.CreateJob(state: JobState.AwaitingParent, parentJobId: otherParentId);
+        await sut.AddJob(waiting);
+        await sut.AddJob(alreadyPromoted);
+        await sut.AddJob(waitingOnOther);
+
+        var result = await sut.GetContinuationsWaitingOn(parentId);
+
+        result.Select(j => j.JobId).Should().BeEquivalentTo([waiting.JobId]);
+    }
+
+    [Fact]
     public async Task AddJob_AlsoWritesInitialHistoryEntry()
     {
         var sut = CreateSut();

@@ -41,9 +41,9 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
 
         const string sql = @"
             INSERT INTO Jobs
-            (JobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, ScheduledFor, State, Attempts, MaxAttempts, EnqueuedAt, RetryPolicy, ConcurrencyKey, MaxConcurrent, IsDeleted)
+            (JobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, ScheduledFor, State, Attempts, MaxAttempts, EnqueuedAt, RetryPolicy, ConcurrencyKey, MaxConcurrent, ParentJobId, ContinueOnParentFailure, IsDeleted)
             VALUES
-            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, @EnqueuedAt, @RetryPolicy, @ConcurrencyKey, @MaxConcurrent, 0)";
+            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, @EnqueuedAt, @RetryPolicy, @ConcurrencyKey, @MaxConcurrent, @ParentJobId, @ContinueOnParentFailure, 0)";
         await conn.ExecuteAsync(sql, new
         {
             job.JobId,
@@ -59,7 +59,9 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
             job.EnqueuedAt,
             job.RetryPolicy,
             job.ConcurrencyKey,
-            job.MaxConcurrent
+            job.MaxConcurrent,
+            job.ParentJobId,
+            job.ContinueOnParentFailure
         }, tx);
         await AppendHistory(conn, tx, job.JobId, job.State, null);
 
@@ -131,7 +133,7 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         await tx.CommitAsync();
     }
 
-    public async Task Requeue(string id)
+    public async Task Requeue(string id, string note = "Requeued manually")
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
@@ -142,7 +144,7 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
             SET State = @State, ScheduledFor = NULL, Attempts = 0
             WHERE JobId = @Id AND IsDeleted = 0";
         await conn.ExecuteAsync(sql, new { Id = id, State = (int)JobState.Enqueued }, tx);
-        await AppendHistory(conn, tx, id, JobState.Enqueued, "Requeued manually");
+        await AppendHistory(conn, tx, id, JobState.Enqueued, note);
 
         await tx.CommitAsync();
     }
@@ -262,5 +264,14 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
             SELECT * FROM Jobs
             WHERE IsDeleted = 0 AND State = @State AND DeviceName = @DeviceName";
         return (await conn.QueryAsync<Job>(sql, new { State = (int)JobState.Processing, DeviceName = deviceName })).ToList();
+    }
+
+    public async Task<List<Job>> GetContinuationsWaitingOn(string parentJobId)
+    {
+        await using var conn = CreateConnection();
+        const string sql = @"
+            SELECT * FROM Jobs
+            WHERE IsDeleted = 0 AND State = @State AND ParentJobId = @ParentJobId";
+        return (await conn.QueryAsync<Job>(sql, new { State = (int)JobState.AwaitingParent, ParentJobId = parentJobId })).ToList();
     }
 }
