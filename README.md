@@ -298,6 +298,14 @@ dotnet test
 
 runs both projects; Docker must be running locally for the integration tests to start their SQL Server container.
 
+## Versioning
+
+Packages are released from git tags (`vX.Y.Z`) via [.github/workflows/release.yml](.github/workflows/release.yml), which builds, tests, and pushes every package in this repo to NuGet.org with that same version — all packages here are versioned and released together, not independently.
+
+Once tagged `1.0.0`, the intent is standard [SemVer](https://semver.org/): a **patch** release is a bug fix with no API change; a **minor** release adds functionality (new methods, new optional parameters, new packages) without breaking existing callers; a **major** release is reserved for a breaking change to public API surface — a removed/renamed public type or member, a changed method signature, or a behavioral change callers could reasonably have depended on. `IDeviceConnectionRegistry` going from a synchronous to an async interface (see git history) is the kind of change that would require a major bump once this commitment is in effect.
+
+**This project is pre-1.0** (see Status below) and has not yet made that commitment — the `0.0.x`/`0.x.y` versions released so far may include breaking changes in a minor or patch bump. Treat every pre-1.0 upgrade as a potential breaking change until the 1.0.0 release, after which the policy above applies.
+
 ## Status
 
 This is a proof of concept. See the [repository](https://github.com/housgh/Axon) for source, issues, and usage examples.
