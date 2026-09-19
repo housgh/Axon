@@ -50,11 +50,21 @@ public class AxonSqlServerRecurringJobStore(string connectionString) : IAxonRecu
         });
     });
 
-    public Task<List<RecurringJob>> GetAll() => SqlExceptionTranslator.Run(connectionString, async () =>
+    public Task<RecurringJob?> GetById(string recurringJobId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
-        const string sql = "SELECT * FROM RecurringJobs ORDER BY NextRunAt";
-        return (await conn.QueryAsync<RecurringJob>(sql)).ToList();
+        const string sql = "SELECT * FROM RecurringJobs WHERE RecurringJobId = @RecurringJobId";
+        return await conn.QueryFirstOrDefaultAsync<RecurringJob>(sql, new { RecurringJobId = recurringJobId });
+    });
+
+    public Task<List<RecurringJob>> GetAll(int skip = 0, int take = 20) => SqlExceptionTranslator.Run(connectionString, async () =>
+    {
+        await using var conn = CreateConnection();
+        const string sql = @"
+            SELECT * FROM RecurringJobs
+            ORDER BY NextRunAt
+            OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY";
+        return (await conn.QueryAsync<RecurringJob>(sql, new { Skip = skip, Take = take })).ToList();
     });
 
     public Task UpdateNextRun(string recurringJobId, long nextRunAt, long lastRunAt) => SqlExceptionTranslator.Run(connectionString, async () =>

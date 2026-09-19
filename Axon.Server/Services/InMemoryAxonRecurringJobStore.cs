@@ -16,11 +16,23 @@ internal class InMemoryAxonRecurringJobStore : IAxonRecurringJobStore
         return Task.CompletedTask;
     }
 
-    public Task<List<RecurringJob>> GetAll()
+    public Task<RecurringJob?> GetById(string recurringJobId)
     {
         lock (_lock)
         {
-            return Task.FromResult(_recurringJobs.Values.ToList());
+            return Task.FromResult(_recurringJobs.GetValueOrDefault(recurringJobId));
+        }
+    }
+
+    public Task<List<RecurringJob>> GetAll(int skip = 0, int take = 20)
+    {
+        lock (_lock)
+        {
+            return Task.FromResult(_recurringJobs.Values
+                .OrderBy(r => r.NextRunAt)
+                .Skip(skip)
+                .Take(take)
+                .ToList());
         }
     }
 

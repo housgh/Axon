@@ -74,4 +74,55 @@ public class AxonSqlServerRecurringJobStoreTests(SqlServerFixture fixture)
         var all = await sut.GetAll();
         all.Should().NotContain(j => j.RecurringJobId == job.RecurringJobId);
     }
+
+    [Fact]
+    public async Task GetById_ExistingId_ReturnsIt()
+    {
+        var sut = CreateSut();
+        var job = CreateRecurringJob();
+        await sut.AddOrUpdate(job);
+
+        var result = await sut.GetById(job.RecurringJobId);
+
+        result.Should().NotBeNull();
+        result!.RecurringJobId.Should().Be(job.RecurringJobId);
+        result.CronExpression.Should().Be(job.CronExpression);
+    }
+
+    [Fact]
+    public async Task GetById_UnknownId_ReturnsNull()
+    {
+        var sut = CreateSut();
+
+        var result = await sut.GetById(Guid.NewGuid().ToString());
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetAll_Take_LimitsResultCount()
+    {
+        // Distinguishable NextRunAt values placed far apart (and randomized within a wide range)
+        // so this test's own 3 rows sort predictably relative to each other even though the table
+        // is shared with concurrently-running tests in this collection that may add other rows.
+        var sut = CreateSut();
+        var baseTicks = Random.Shared.NextInt64(10_000_000, 20_000_000);
+        var jobs = new[]
+        {
+            CreateRecurringJob(),
+            CreateRecurringJob(),
+            CreateRecurringJob()
+        };
+        for (var i = 0; i < jobs.Length; i++) jobs[i].NextRunAt = baseTicks + i;
+        foreach (var job in jobs) await sut.AddOrUpdate(job);
+
+        var page = await sut.GetAll(skip: 0, take: 2);
+        var ourIdsInPage = page.Select(j => j.RecurringJobId)
+            .Intersect(jobs.Select(j => j.RecurringJobId))
+            .ToList();
+
+        // At most 2 of our 3 rows can appear in a take:2 page - proves take is actually enforced
+        // rather than GetAll silently returning everything.
+        ourIdsInPage.Count.Should().BeLessThanOrEqualTo(2);
+    }
 }

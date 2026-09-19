@@ -19,7 +19,7 @@ public class AxonRecurringJobProcessor(
         while (!stoppingToken.IsCancellationRequested)
         {
             var now = DateTimeOffset.UtcNow;
-            var recurringJobs = await recurringJobStore.GetAll();
+            var recurringJobs = await recurringJobStore.GetAll(take: int.MaxValue);
 
             foreach (var recurringJob in recurringJobs.Where(r => r.NextRunAt <= now.UtcTicks))
             {

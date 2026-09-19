@@ -391,8 +391,8 @@ public static class DependencyInjection
             axon.MapGet("/jobs/{jobId}/history", async (IAxonJobStore jobStore, string jobId) =>
                 Results.Ok(await jobStore.GetHistory(jobId)));
 
-            axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore) =>
-                Results.Ok(await recurringJobStore.GetAll()));
+            axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore, int skip, int take) =>
+                Results.Ok(await recurringJobStore.GetAll(skip, take == 0 ? 20 : take)));
 
             axon.MapGet("/servers", async (IAxonServerInstanceStore instanceStore) =>
             {
@@ -437,8 +437,7 @@ public static class DependencyInjection
             var triggerRecurring = axon.MapPost("/recurring-jobs/{recurringJobId}/trigger", async (
                 HttpContext http, IAxonRecurringJobStore recurringJobStore, IAxonJobStore jobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string recurringJobId) =>
             {
-                var recurringJob = (await recurringJobStore.GetAll())
-                    .FirstOrDefault(r => r.RecurringJobId == recurringJobId);
+                var recurringJob = await recurringJobStore.GetById(recurringJobId);
                 if (recurringJob is null) return Results.NotFound();
 
                 var jobId = Guid.NewGuid().ToString();
