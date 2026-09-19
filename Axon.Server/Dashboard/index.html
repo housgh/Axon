@@ -951,7 +951,7 @@
     }
 
     tr.addEventListener('click', function () {
-      window.open('/axon/jobs/' + encodeURIComponent(job.jobId) + '/view', '_blank');
+      window.location.href = '/axon/jobs/' + encodeURIComponent(job.jobId) + '/view';
     });
 
     return tr;
