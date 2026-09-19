@@ -143,6 +143,8 @@ public class Job : JobInfo
         Assembly = jobInfo.Assembly;
         DeclaringType = jobInfo.DeclaringType;
         RetryPolicy = jobInfo.RetryPolicy;
+        ConcurrencyKey = jobInfo.ConcurrencyKey;
+        MaxConcurrent = jobInfo.MaxConcurrent;
     }
     public string DeviceName { get; set; } = null!;
     public string JobId { get; set; } = null!;

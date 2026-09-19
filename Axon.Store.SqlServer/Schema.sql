@@ -18,6 +18,8 @@ BEGIN
         ProcessingDeadline BIGINT    NULL,
         EnqueuedAt        BIGINT     NOT NULL DEFAULT 0,
         RetryPolicy       NVARCHAR(MAX) NULL,
+        ConcurrencyKey    NVARCHAR(256) NULL,
+        MaxConcurrent     INT        NULL,
         IsDeleted         BIT        NOT NULL DEFAULT 0
     );
 
@@ -47,6 +49,24 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'RetryPolicy')
 BEGIN
     ALTER TABLE Jobs ADD RetryPolicy NVARCHAR(MAX) NULL;
+END
+
+-- Per-job-type concurrency limit: at most MaxConcurrent jobs sharing the same ConcurrencyKey may
+-- be Processing at once (enforced atomically inside TryClaimJob). NULL ConcurrencyKey means no
+-- limit is enforced for that job.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'ConcurrencyKey')
+BEGIN
+    ALTER TABLE Jobs ADD ConcurrencyKey NVARCHAR(256) NULL;
+END
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'MaxConcurrent')
+BEGIN
+    ALTER TABLE Jobs ADD MaxConcurrent INT NULL;
+END
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('Jobs') AND name = 'IX_Jobs_ConcurrencyKey_State')
+BEGIN
+    CREATE INDEX IX_Jobs_ConcurrencyKey_State ON Jobs (ConcurrencyKey, State) WHERE IsDeleted = 0 AND ConcurrencyKey IS NOT NULL;
 END
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'JobHistory')

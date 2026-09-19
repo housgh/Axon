@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Axon.Core;
 using Axon.Core.Helpers;
 using Axon.Core.Models;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -7,12 +8,12 @@ namespace Axon.Client.Services;
 
 public interface IAxonClient
 {
-    Task<string> EnqueueAsync(Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null);
-    Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null);
-    Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null);
-    Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null);
-    Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null);
-    Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null);
+    Task<string> EnqueueAsync(Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
     Task AddOrUpdateRecurringAsync(string recurringJobId, string cronExpression, Expression<Action> methodCall);
     Task AddOrUpdateRecurringAsync<TType>(string recurringJobId, string cronExpression, Expression<Action<TType>> methodCall);
     Task RemoveRecurringAsync(string recurringJobId);
@@ -39,29 +40,29 @@ internal class AxonClient : IAxonClient
     private readonly HubConnection _hubConnection;
     private readonly string _deviceName;
 
-    public Task<string> EnqueueAsync(Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), null);
+    public Task<string> EnqueueAsync(Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy, concurrencyKey, maxConcurrent), null);
 
-    public Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), null);
+    public Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy, concurrencyKey, maxConcurrent), null);
 
-    public Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), DateTimeOffset.UtcNow.Add(delay));
+    public Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy, concurrencyKey, maxConcurrent), DateTimeOffset.UtcNow.Add(delay));
 
-    public Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), DateTimeOffset.UtcNow.Add(delay));
+    public Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy, concurrencyKey, maxConcurrent), DateTimeOffset.UtcNow.Add(delay));
 
-    public Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), scheduledFor);
+    public Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy, concurrencyKey, maxConcurrent), scheduledFor);
 
-    public Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), scheduledFor);
+    public Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy, concurrencyKey, maxConcurrent), scheduledFor);
 
     public Task AddOrUpdateRecurringAsync(string recurringJobId, string cronExpression, Expression<Action> methodCall) =>
-        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null));
+        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null, null, null));
 
     public Task AddOrUpdateRecurringAsync<TType>(string recurringJobId, string cronExpression, Expression<Action<TType>> methodCall) =>
-        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null));
+        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null, null, null));
 
     public Task RemoveRecurringAsync(string recurringJobId) =>
         _hubConnection.InvokeAsync("RemoveRecurring", recurringJobId);
@@ -85,9 +86,27 @@ internal class AxonClient : IAxonClient
         return jobId;
     }
 
-    private static JobInfo? GetJobInfo(LambdaExpression methodCall, AxonRetryPolicy? retryPolicy)
+    // internal (not private) so Axon.Tests.Unit can verify the concurrency key/attribute
+    // precedence logic directly, without needing a real or faked HubConnection.
+    internal static JobInfo? GetJobInfo(LambdaExpression methodCall, AxonRetryPolicy? retryPolicy, string? concurrencyKey, int? maxConcurrent)
     {
         if (methodCall.Body is not MethodCallExpression call) return null;
+
+        // An explicit concurrencyKey argument always wins over the attribute; the attribute is
+        // only consulted when the caller didn't pass one, so a call-site override never has to
+        // fight a method-level default.
+        if (concurrencyKey is null)
+        {
+            var limit = call.Method.GetCustomAttributes(typeof(AxonConcurrencyLimitAttribute), inherit: false)
+                .Cast<AxonConcurrencyLimitAttribute>()
+                .FirstOrDefault();
+            if (limit is not null)
+            {
+                concurrencyKey = limit.ConcurrencyKey;
+                maxConcurrent = limit.MaxConcurrent;
+            }
+        }
+
         return new JobInfo
         {
             Arguments = GetArguments(call),
@@ -95,6 +114,8 @@ internal class AxonClient : IAxonClient
             MethodName = call.Method.Name,
             DeclaringType = call.Method.DeclaringType!.FullName!,
             RetryPolicy = retryPolicy,
+            ConcurrencyKey = concurrencyKey,
+            MaxConcurrent = maxConcurrent,
         };
     }
 

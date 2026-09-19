@@ -125,6 +125,18 @@ public class InMemoryAxonJobStore : IAxonJobStore
                 return Task.FromResult(false);
             }
 
+            // Concurrency-limit check happens under the same lock as the claim itself, so it's
+            // atomic against other concurrent TryClaimJob calls for the same ConcurrencyKey -
+            // the same race-safety requirement as the State IN (...) claim guard above.
+            if (job.ConcurrencyKey is not null && job.MaxConcurrent is { } maxConcurrent)
+            {
+                var currentlyProcessing = _jobs.Count(j => j.ConcurrencyKey == job.ConcurrencyKey && j.State == JobState.Processing);
+                if (currentlyProcessing >= maxConcurrent)
+                {
+                    return Task.FromResult(false);
+                }
+            }
+
             job.State = JobState.Processing;
             job.ProcessingDeadline = processingDeadline;
             AppendHistory(id, JobState.Processing, note);

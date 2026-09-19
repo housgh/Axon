@@ -183,6 +183,65 @@ public class AxonSqlServerStoreTests(SqlServerFixture fixture)
     }
 
     [Fact]
+    public async Task TryClaimJob_ConcurrencyLimitNotReached_ClaimsAgainstRealSqlServer()
+    {
+        // ConcurrencyKey must be unique per test: the limit is a COUNT(*) over every row sharing
+        // the key, in a database shared across all tests in this fixture, so a fixed literal key
+        // (unlike JobId, which is already a fresh GUID per test) would let one test's leftover
+        // Processing rows pollute another test's count.
+        var concurrencyKey = Guid.NewGuid().ToString();
+        var sut = CreateSut();
+        var limited = JobFactory.CreateJob(state: JobState.Enqueued, concurrencyKey: concurrencyKey, maxConcurrent: 2);
+        var alreadyProcessing = JobFactory.CreateJob(state: JobState.Processing, concurrencyKey: concurrencyKey, maxConcurrent: 2);
+        await sut.AddJob(limited);
+        await sut.AddJob(alreadyProcessing);
+
+        var claimed = await sut.TryClaimJob(limited.JobId, processingDeadline: 999);
+
+        claimed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TryClaimJob_ConcurrencyLimitReached_RejectsAgainstRealSqlServer()
+    {
+        var concurrencyKey = Guid.NewGuid().ToString();
+        var sut = CreateSut();
+        var limited = JobFactory.CreateJob(state: JobState.Enqueued, concurrencyKey: concurrencyKey, maxConcurrent: 1);
+        var alreadyProcessing = JobFactory.CreateJob(state: JobState.Processing, concurrencyKey: concurrencyKey, maxConcurrent: 1);
+        await sut.AddJob(limited);
+        await sut.AddJob(alreadyProcessing);
+
+        var claimed = await sut.TryClaimJob(limited.JobId, processingDeadline: 999);
+
+        claimed.Should().BeFalse();
+        var result = await sut.GetJob(limited.JobId);
+        result!.State.Should().Be(JobState.Enqueued);
+    }
+
+    [Fact]
+    public async Task TryClaimJob_ConcurrencyLimitedJobs_ConcurrentCallersAgainstRealSqlServer_NeverExceedLimit()
+    {
+        // The core correctness claim for this feature: racing 10 real claims against real SQL
+        // Server, all sharing a concurrency key with MaxConcurrent=3, must never let more than 3
+        // end up Processing - proving the UPDLOCK/HOLDLOCK count-then-update in
+        // AxonSqlServerStore.TryClaimJob actually serializes the count-check against real
+        // concurrent transactions, not just against sequential/mocked calls.
+        var concurrencyKey = Guid.NewGuid().ToString();
+        var sut = CreateSut();
+        var jobs = Enumerable.Range(0, 10)
+            .Select(_ => JobFactory.CreateJob(state: JobState.Enqueued, concurrencyKey: concurrencyKey, maxConcurrent: 3))
+            .ToList();
+        foreach (var job in jobs)
+        {
+            await sut.AddJob(job);
+        }
+
+        var results = await Task.WhenAll(jobs.Select((job, i) => sut.TryClaimJob(job.JobId, processingDeadline: i)));
+
+        results.Count(r => r).Should().Be(3, "MaxConcurrent=3 must never be exceeded even under real concurrent claims");
+    }
+
+    [Fact]
     public async Task GetOrphanedProcessingJobs_ReturnsOnlyPastDeadlineProcessingJobs()
     {
         var sut = CreateSut();

@@ -38,6 +38,19 @@ public class WeatherForecastController(IAxonClient axonClient) : ControllerBase
         return Ok(new { JobId = jobId });
     }
 
+    [HttpGet("concurrency-limited")]
+    public async Task<IActionResult> ConcurrencyLimited()
+    {
+        // At most 2 jobs sharing the "email-sender" key may be Processing across the whole
+        // fleet at once - useful for throttling against a rate-limited downstream dependency,
+        // for example. With only one client connected here, dispatch is already serialized by
+        // there being a single worker, so this endpoint demonstrates the API rather than visibly
+        // observable throttling (that needs multiple connected clients to see).
+        var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.WriteHelloWorld("Hello World"),
+            concurrencyKey: "email-sender", maxConcurrent: 2);
+        return Ok(new { JobId = jobId });
+    }
+
 }
 
 public class MyClass

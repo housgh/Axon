@@ -187,6 +187,27 @@ var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.WriteHelloWorld("Hello
 
 `MaxAttempts` is the total attempts including the first (so `5` means up to 4 retries). `RetryDelaysSeconds` is indexed by retry attempt (0-based); once exhausted, the last entry is reused for every further retry — so `[5, 30, 120]` with `MaxAttempts = 10` retries at 5s, 30s, then 120s, 120s, 120s, ... for the remaining attempts.
 
+Cap how many jobs of a given type may be `Processing` at once across the whole fleet with a concurrency limit — useful for throttling against a rate-limited downstream dependency:
+
+```csharp
+var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.SendEmail(...),
+    concurrencyKey: "email-sender", maxConcurrent: 5);
+```
+
+At most 5 jobs sharing the `"email-sender"` key will be `Processing` at once; a 6th stays `Enqueued` until one of the 5 finishes (succeeds, fails terminally, or is reclaimed as orphaned). The limit is enforced atomically inside the same claim operation that makes multi-instance dispatch safe (see [docs/architecture.md#multi-instance-dispatch-safety](docs/architecture.md#multi-instance-dispatch-safety)), so it holds even with multiple `Axon.Server` instances racing to claim jobs sharing a key against `Axon.Store.SqlServer`.
+
+Instead of passing `concurrencyKey`/`maxConcurrent` at every call site, declare a default on the method itself:
+
+```csharp
+public class EmailJobs
+{
+    [AxonConcurrencyLimit("email-sender", 5)]
+    public void SendEmail(string to) { /* ... */ }
+}
+```
+
+An explicit `concurrencyKey` argument on `EnqueueAsync`/`ScheduleAsync` always overrides the attribute when both are present.
+
 Recurring jobs use standard cron expressions and are idempotent by `recurringJobId` — calling `AddOrUpdateRecurringAsync` again with the same id updates the existing schedule instead of creating a duplicate:
 
 ```csharp

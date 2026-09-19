@@ -139,4 +139,70 @@ public class InMemoryAxonJobStoreTests
 
         history.Select(h => h.State).Should().Equal(JobState.Enqueued, JobState.Processing, JobState.Succeeded);
     }
+
+    [Fact]
+    public async Task TryClaimJob_ConcurrencyLimitNotReached_Claims()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued, concurrencyKey: "email", maxConcurrent: 2));
+        await _sut.AddJob(JobFactory.CreateJob("job-2", state: JobState.Processing, concurrencyKey: "email", maxConcurrent: 2));
+
+        var claimed = await _sut.TryClaimJob("job-1", processingDeadline: 999);
+
+        claimed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TryClaimJob_ConcurrencyLimitReached_ReturnsFalseAndLeavesJobUnclaimed()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued, concurrencyKey: "email", maxConcurrent: 1));
+        await _sut.AddJob(JobFactory.CreateJob("job-2", state: JobState.Processing, concurrencyKey: "email", maxConcurrent: 1));
+
+        var claimed = await _sut.TryClaimJob("job-1", processingDeadline: 999);
+
+        claimed.Should().BeFalse();
+        var job = await _sut.GetJob("job-1");
+        job!.State.Should().Be(JobState.Enqueued);
+    }
+
+    [Fact]
+    public async Task TryClaimJob_ConcurrencyLimitOnlyCountsSameKey()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued, concurrencyKey: "email", maxConcurrent: 1));
+        await _sut.AddJob(JobFactory.CreateJob("job-2", state: JobState.Processing, concurrencyKey: "sms", maxConcurrent: 1));
+
+        var claimed = await _sut.TryClaimJob("job-1", processingDeadline: 999);
+
+        claimed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TryClaimJob_NoConcurrencyKey_IsUnaffectedByOtherProcessingJobs()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
+        for (var i = 0; i < 10; i++)
+        {
+            await _sut.AddJob(JobFactory.CreateJob($"other-{i}", state: JobState.Processing));
+        }
+
+        var claimed = await _sut.TryClaimJob("job-1", processingDeadline: 999);
+
+        claimed.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task TryClaimJob_ConcurrencyLimitedJobs_ConcurrentCallers_NeverExceedLimit()
+    {
+        // 10 jobs share a concurrency key with MaxConcurrent=3; racing all 10 claims at once must
+        // never let more than 3 end up Processing, mirroring the same race-safety shape as the
+        // existing TryClaimJob_ConcurrentCallers_ExactlyOneWins test but for the concurrency guard.
+        for (var i = 0; i < 10; i++)
+        {
+            await _sut.AddJob(JobFactory.CreateJob($"job-{i}", state: JobState.Enqueued, concurrencyKey: "email", maxConcurrent: 3));
+        }
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 10)
+            .Select(i => _sut.TryClaimJob($"job-{i}", processingDeadline: i)));
+
+        results.Count(r => r).Should().Be(3);
+    }
 }

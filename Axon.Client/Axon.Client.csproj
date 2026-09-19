@@ -20,6 +20,13 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Lets tests exercise AxonClient's internal job-info construction (retry policy,
+             concurrency key/attribute precedence) without needing a real or faked HubConnection,
+             which the public IAxonClient surface alone can't do cleanly. -->
+        <InternalsVisibleTo Include="Axon.Tests.Unit" />
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 
