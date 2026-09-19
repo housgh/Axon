@@ -66,7 +66,7 @@ internal static class SqlExceptionTranslator
                 e);
         }
 
-        if (ConnectivityErrorNumbers.Contains(e.Number))
+        if (IsConnectivityFailure(e))
         {
             return new AxonStoreException(
                 $"Could not reach SQL Server at '{dataSource}'. Check that it is running, " +
@@ -77,6 +77,17 @@ internal static class SqlExceptionTranslator
 
         return new AxonStoreException($"SQL Server operation against '{dataSource}' failed. ({e.Message.Trim()})", e);
     }
+
+    // A connection-level failure's exact SqlException.Number varies by platform/transport (the
+    // underlying socket error is wrapped differently on Windows vs. Linux, and even the same
+    // socket error can surface under different numbers across TCP provider versions), so an
+    // error-number allowlist alone isn't reliable across environments - SQL Server's own
+    // canonical "couldn't connect at all" message text is more stable than its wrapped error
+    // number, so it's checked as a fallback alongside the known numbers.
+    private static bool IsConnectivityFailure(SqlException e) =>
+        ConnectivityErrorNumbers.Contains(e.Number) ||
+        e.Message.Contains("A network-related or instance-specific error occurred", StringComparison.OrdinalIgnoreCase) ||
+        e.Message.Contains("Connection Timeout Expired", StringComparison.OrdinalIgnoreCase);
 
     // Only the host/port, never credentials, so this is always safe to put in an exception
     // message that might end up in logs.
