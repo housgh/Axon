@@ -274,4 +274,44 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
             WHERE IsDeleted = 0 AND State = @State AND ParentJobId = @ParentJobId";
         return (await conn.QueryAsync<Job>(sql, new { State = (int)JobState.AwaitingParent, ParentJobId = parentJobId })).ToList();
     }
+
+    public async Task<int> DeleteCompletedJobsOlderThan(long cutoff)
+    {
+        await using var conn = CreateConnection();
+        await conn.OpenAsync();
+        await using var tx = await conn.BeginTransactionAsync();
+
+        // A job's "finished at" isn't its own column - it's the timestamp of its most recent
+        // JobHistory row - so identify candidates via that join rather than a dedicated
+        // completed-at column, to avoid adding one more field every terminal-state code path
+        // would need to remember to set.
+        const string selectSql = @"
+            SELECT j.JobId FROM Jobs j
+            INNER JOIN (
+                SELECT JobId, MAX(Timestamp) AS LastTimestamp FROM JobHistory GROUP BY JobId
+            ) h ON h.JobId = j.JobId
+            WHERE j.IsDeleted = 0 AND j.State IN (@Succeeded, @Failed, @Skipped) AND h.LastTimestamp < @Cutoff";
+        var jobIds = (await conn.QueryAsync<string>(selectSql, new
+        {
+            Succeeded = (int)JobState.Succeeded,
+            Failed = (int)JobState.Failed,
+            Skipped = (int)JobState.Skipped,
+            Cutoff = cutoff
+        }, tx)).ToList();
+
+        if (jobIds.Count == 0)
+        {
+            await tx.CommitAsync();
+            return 0;
+        }
+
+        const string deleteJobsSql = "UPDATE Jobs SET IsDeleted = 1 WHERE JobId IN @JobIds";
+        await conn.ExecuteAsync(deleteJobsSql, new { JobIds = jobIds }, tx);
+
+        const string deleteHistorySql = "DELETE FROM JobHistory WHERE JobId IN @JobIds";
+        await conn.ExecuteAsync(deleteHistorySql, new { JobIds = jobIds }, tx);
+
+        await tx.CommitAsync();
+        return jobIds.Count;
+    }
 }

@@ -108,6 +108,26 @@ public static class DependencyInjection
         return builder;
     }
 
+    /// <summary>
+    /// Opts into a background sweep that purges completed jobs (Succeeded/Failed/Skipped) and
+    /// their history older than <paramref name="retention"/>, so the Jobs/JobHistory tables don't
+    /// grow unbounded in a long-running deployment. Off by default - without this call, jobs are
+    /// kept forever.
+    /// </summary>
+    public static AxonServerBuilder AddJobCleanup(this AxonServerBuilder builder, TimeSpan retention, TimeSpan? pollInterval = null)
+    {
+        if (retention <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(retention), "Retention must be positive.");
+
+        builder.Services.AddSingleton(new AxonJobCleanupOptions
+        {
+            Retention = retention,
+            PollInterval = pollInterval ?? TimeSpan.FromHours(1)
+        });
+        builder.Services.AddHostedService<AxonJobCleanupProcessor>();
+        return builder;
+    }
+
     public static AxonServerBuilder AddAuthentication(this AxonServerBuilder builder, Action<DashboardAuthOptions> configureAuth)
     {
         var services = builder.Services;

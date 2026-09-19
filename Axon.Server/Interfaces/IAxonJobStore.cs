@@ -32,4 +32,12 @@ public interface IAxonJobStore
 
     /// <summary>Continuation jobs (State == AwaitingParent) whose ParentJobId is the given job.</summary>
     Task<List<Job>> GetContinuationsWaitingOn(string parentJobId);
+
+    /// <summary>
+    /// Deletes (soft-deletes, same as <see cref="DeleteJob"/>) every job in a terminal state
+    /// (Succeeded, Failed, or Skipped) whose most recent history entry is older than
+    /// <paramref name="cutoff"/>, along with that job's history rows. Returns the number of jobs
+    /// deleted. Used by the opt-in job-data retention cleanup.
+    /// </summary>
+    Task<int> DeleteCompletedJobsOlderThan(long cutoff);
 }

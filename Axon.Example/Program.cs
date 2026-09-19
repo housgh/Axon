@@ -22,7 +22,8 @@ builder.Services.AddAxonServer()
         builder.Configuration.GetSection("Axon:DashboardUsers").Bind(auth.Users);
         if (auth.Users.Count == 0)
             throw new InvalidOperationException("Axon:DashboardUsers is not configured.");
-    });
+    })
+    .AddJobCleanup(retention: TimeSpan.FromDays(30));
 
 var sqlConnectionString = builder.Configuration["Axon:SqlConnectionString"];
 if (!string.IsNullOrEmpty(sqlConnectionString))

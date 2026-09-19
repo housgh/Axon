@@ -130,7 +130,19 @@ builder.Services.AddAxonServer()
 
 This only registers Axon's meter/activity source with the SDK - configure whatever exporter you want (OTLP, console, Prometheus, etc.) via `configureMetrics`/`configureTracing`, the same way you would for any other OpenTelemetry SDK setup.
 
-### 5. Register the client
+### 5. (Optional) Register job data cleanup
+
+By default, completed jobs (`Succeeded`/`Failed`/`Skipped`) and their history are kept forever. Chain `.AddJobCleanup(...)` to purge them after a retention window, so the Jobs/JobHistory tables don't grow unbounded in a long-running deployment:
+
+```csharp
+builder.Services.AddAxonServer()
+    .AddAxonDashboard()
+    .AddJobCleanup(retention: TimeSpan.FromDays(30));
+```
+
+A background sweep (once an hour by default; override with the `pollInterval` parameter) deletes completed jobs whose most recent history entry is older than `retention`. `Enqueued`/`Scheduled`/`Processing`/`AwaitingParent` jobs are never touched, regardless of age.
+
+### 6. Register the client
 
 Point the client at wherever `Axon.Server` is hosted (its own process, or a different microservice's address). This opens the SignalR/WebSocket connection (`/hubs/axon`) that the server dispatches jobs over:
 
@@ -138,7 +150,7 @@ Point the client at wherever `Axon.Server` is hosted (its own process, or a diff
 builder.Services.AddAxonClient(axonBaseUrl); // e.g. "https://localhost:7221"
 ```
 
-### 6. Map the server middleware and dashboard
+### 7. Map the server middleware and dashboard
 
 ```csharp
 app.UseAxonServer();
@@ -148,7 +160,7 @@ This maps the SignalR hub (`/hubs/axon`) and, if opted into in step 1, the `/axo
 - `GET /axon/health/live` — always `200 Healthy` once the process is up; use as a liveness probe.
 - `GET /axon/health/ready` — `200 Healthy` only if the configured job store (in-memory or `Axon.Store.SqlServer`) can actually be reached; use as a readiness probe so an orchestrator stops routing traffic to an instance whose database connection is down.
 
-### 7. Enqueue, schedule, and run recurring jobs
+### 8. Enqueue, schedule, and run recurring jobs
 
 Inject `IAxonClient` and call methods on any plain class — Axon serializes the method call as an expression tree, sends it to the server, and the server dispatches it back to a connected client for execution:
 
@@ -234,7 +246,7 @@ await axonClient.AddOrUpdateRecurringAsync<MyClass>(
 await axonClient.RemoveRecurringAsync("hourly-hello");
 ```
 
-### 8. Open the dashboard
+### 9. Open the dashboard
 
 Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password. The dashboard is organized into four tabs:
 - **Jobs** — job history, state, retry/delete.

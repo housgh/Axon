@@ -205,4 +205,59 @@ public class InMemoryAxonJobStoreTests
 
         results.Count(r => r).Should().Be(3);
     }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_DeletesTerminalJobsPastCutoff()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
+        await _sut.UpdateState("job-1", JobState.Succeeded);
+
+        // A cutoff strictly after "now" guarantees the job's most recent history entry
+        // (appended just above) is older than it.
+        var cutoff = DateTime.UtcNow.AddSeconds(1).Ticks;
+        var deleted = await _sut.DeleteCompletedJobsOlderThan(cutoff);
+
+        deleted.Should().Be(1);
+        (await _sut.GetJob("job-1")).Should().BeNull();
+        (await _sut.GetHistory("job-1")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_KeepsJobsNewerThanCutoff()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
+        await _sut.UpdateState("job-1", JobState.Succeeded);
+
+        // A cutoff in the distant past guarantees the job's history is newer than it.
+        var deleted = await _sut.DeleteCompletedJobsOlderThan(cutoff: 0);
+
+        deleted.Should().Be(0);
+        (await _sut.GetJob("job-1")).Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData(JobState.Enqueued)]
+    [InlineData(JobState.Scheduled)]
+    [InlineData(JobState.Processing)]
+    [InlineData(JobState.AwaitingParent)]
+    public async Task DeleteCompletedJobsOlderThan_NeverDeletesNonTerminalJobs(JobState nonTerminalState)
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: nonTerminalState));
+
+        var deleted = await _sut.DeleteCompletedJobsOlderThan(cutoff: DateTime.UtcNow.AddYears(1).Ticks);
+
+        deleted.Should().Be(0);
+        (await _sut.GetJob("job-1")).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_DeletesSkippedJobs()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.AwaitingParent));
+        await _sut.UpdateState("job-1", JobState.Skipped);
+
+        var deleted = await _sut.DeleteCompletedJobsOlderThan(DateTime.UtcNow.AddSeconds(1).Ticks);
+
+        deleted.Should().Be(1);
+    }
 }

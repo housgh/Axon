@@ -184,4 +184,27 @@ public class InMemoryAxonJobStore : IAxonJobStore
                 .ToList());
         }
     }
+
+    private static readonly JobState[] TerminalStates = [JobState.Succeeded, JobState.Failed, JobState.Skipped];
+
+    public Task<int> DeleteCompletedJobsOlderThan(long cutoff)
+    {
+        lock (_lock)
+        {
+            var toDelete = _jobs
+                .Where(j => TerminalStates.Contains(j.State))
+                .Where(j =>
+                {
+                    var lastHistoryTimestamp = _history.Where(h => h.JobId == j.JobId).Select(h => h.Timestamp).DefaultIfEmpty(0).Max();
+                    return lastHistoryTimestamp < cutoff;
+                })
+                .Select(j => j.JobId)
+                .ToList();
+
+            _jobs.RemoveAll(j => toDelete.Contains(j.JobId));
+            _history.RemoveAll(h => toDelete.Contains(h.JobId));
+
+            return Task.FromResult(toDelete.Count);
+        }
+    }
 }

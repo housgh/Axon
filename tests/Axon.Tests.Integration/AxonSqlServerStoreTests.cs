@@ -303,4 +303,80 @@ public class AxonSqlServerStoreTests(SqlServerFixture fixture)
 
         result.Select(j => j.JobId).Should().BeEquivalentTo([job.JobId]);
     }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_DeletesTerminalJobPastCutoffAndItsHistory()
+    {
+        // Asserts on this test's own job id, not the returned count: the fixture database is
+        // shared across every test in this class (via the collection fixture), so a bare count
+        // could include other tests' leftover terminal jobs.
+        var sut = CreateSut();
+        var job = JobFactory.CreateJob(state: JobState.Enqueued);
+        await sut.AddJob(job);
+        await sut.UpdateState(job.JobId, JobState.Succeeded);
+
+        var cutoff = DateTime.UtcNow.AddSeconds(1).Ticks;
+        await sut.DeleteCompletedJobsOlderThan(cutoff);
+
+        (await sut.GetJob(job.JobId)).Should().BeNull();
+        (await sut.GetHistory(job.JobId)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_KeepsJobsNewerThanCutoff()
+    {
+        var sut = CreateSut();
+        var job = JobFactory.CreateJob(state: JobState.Enqueued);
+        await sut.AddJob(job);
+        await sut.UpdateState(job.JobId, JobState.Succeeded);
+
+        await sut.DeleteCompletedJobsOlderThan(cutoff: 0);
+
+        (await sut.GetJob(job.JobId)).Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData(JobState.Enqueued)]
+    [InlineData(JobState.Scheduled)]
+    [InlineData(JobState.Processing)]
+    [InlineData(JobState.AwaitingParent)]
+    public async Task DeleteCompletedJobsOlderThan_NeverDeletesNonTerminalJobsAgainstRealSqlServer(JobState nonTerminalState)
+    {
+        var sut = CreateSut();
+        var job = JobFactory.CreateJob(state: nonTerminalState);
+        await sut.AddJob(job);
+
+        await sut.DeleteCompletedJobsOlderThan(DateTime.UtcNow.AddYears(1).Ticks);
+
+        (await sut.GetJob(job.JobId)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_OnlyDeletesJobsPastCutoff_LeavesOthersIntact()
+    {
+        // Asserts on specific job ids rather than a total deleted count: this fixture's database
+        // is shared across every test in this class (via the collection fixture), and other tests
+        // leave their own Succeeded/Failed jobs behind, so a bare count assertion here would be
+        // polluted by unrelated tests' data rather than proving this test's own behavior.
+        var sut = CreateSut();
+        var old = JobFactory.CreateJob(state: JobState.Enqueued);
+        await sut.AddJob(old);
+        await sut.UpdateState(old.JobId, JobState.Succeeded);
+
+        // A real gap between "old" finishing and the cutoff (rather than a cutoff set once for
+        // both jobs) is what makes "old" provably older than the cutoff and "recent" provably
+        // newer than it - both jobs otherwise settle within the same test-execution millisecond.
+        await Task.Delay(50);
+        var cutoff = DateTime.UtcNow.Ticks;
+        await Task.Delay(50);
+
+        var recent = JobFactory.CreateJob(state: JobState.Enqueued);
+        await sut.AddJob(recent);
+        await sut.UpdateState(recent.JobId, JobState.Succeeded);
+
+        await sut.DeleteCompletedJobsOlderThan(cutoff);
+
+        (await sut.GetJob(old.JobId)).Should().BeNull();
+        (await sut.GetJob(recent.JobId)).Should().NotBeNull();
+    }
 }
