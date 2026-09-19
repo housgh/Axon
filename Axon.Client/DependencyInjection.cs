@@ -21,5 +21,6 @@ public static class DependencyInjection
 
         services.AddSingleton(connection);
         services.AddSingleton<IAxonClient, AxonClient>();
+        services.AddHostedService<AxonClientStarter>();
     }
 }

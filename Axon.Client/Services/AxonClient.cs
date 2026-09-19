@@ -36,7 +36,7 @@ internal class AxonClient : IAxonClient
         _hubConnection = hubConnection;
         _deviceName = $"{Environment.MachineName}_{Guid.NewGuid()}";
         InitClient();
-        hubConnection.StartAsync();
+        StartAndRegister();
     }
 
     private void InitClient()
@@ -45,6 +45,31 @@ internal class AxonClient : IAxonClient
             OnInvoke(jobId, jobInfo));
 
         _hubConnection.Reconnected += _ => _hubConnection.InvokeAsync("Register", _deviceName);
+    }
+
+    // Registers on the initial connect too, not just Reconnected, so the device shows up in the
+    // dashboard's Clients tab as soon as it comes online instead of only after its first job.
+    // WithAutomaticReconnect() only covers a connection that already succeeded once - the first
+    // StartAsync() here gets no retry from SignalR, so a transient failure (e.g. the server or a
+    // load balancer in front of it isn't accepting connections yet) is retried here instead of
+    // being left to crash the process as an unhandled exception from this async void method.
+    private async void StartAndRegister()
+    {
+        var delay = TimeSpan.FromSeconds(1);
+        while (true)
+        {
+            try
+            {
+                await _hubConnection.StartAsync();
+                await _hubConnection.InvokeAsync("Register", _deviceName);
+                return;
+            }
+            catch
+            {
+                await Task.Delay(delay);
+                delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 30));
+            }
+        }
     }
 
     private readonly HubConnection _hubConnection;
