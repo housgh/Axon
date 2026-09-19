@@ -23,6 +23,7 @@ and **Redis** (SignalR backplane), with **1 `Axon.Client`** connecting through t
 
 ```bash
 cd deploy
+cp .env.example .env   # first time only - see "Not for production" below before changing anything
 docker compose up -d --build
 ```
 
@@ -31,10 +32,30 @@ Then:
 
 - **Dashboard**: http://localhost:8080/axon (through the load balancer) — login `admin` / `P@ssw0rd`. Also reachable directly per-instance on 8081/8082/8083.
 - **Client**: http://localhost:8090/enqueue — enqueues one job; http://localhost:8090/enqueue-many/10 for a batch; http://localhost:8090/recurring to register a once-a-minute recurring job.
-- **SQL Server**: `localhost:1433`, sa / `Ax0n!DemoPassw0rd`.
+- **SQL Server**: `localhost:1433`, sa / whatever `SQL_SA_PASSWORD` resolves to (see `.env`).
 - **Redis**: `localhost:6379`.
 
 Tear down with `docker compose down` (add `-v` to also drop the SQL Server and Data Protection key volumes for a clean-slate rerun).
+
+## Not for production
+
+This stack is a correctness demo, not a deployment template - copying it straight to a real
+environment would ship two real problems:
+
+- **Secrets in plain text.** `SQL_SA_PASSWORD` (`.env`) and the dashboard passwords
+  (`../examples/Axon.Example.Server/appsettings.json`'s `Axon:DashboardUsers`) are plaintext
+  config values, fine for a throwaway local stack but not how you'd want to hand credentials to a
+  real deployment - use your platform's actual secrets manager (Docker/Kubernetes secrets, Azure
+  Key Vault, AWS Secrets Manager, etc.) instead of baking them into compose/appsettings files.
+- **No TLS anywhere.** nginx terminates plain HTTP, and every `Axon.Server` instance talks plain
+  HTTP to each other and to SQL Server/Redis. The dashboard's auth cookie is already
+  `SecurePolicy = Always` (browsers refuse to send a Secure cookie over plain HTTP), so this
+  compose file specifically only works today because everything stays on `localhost` - it would
+  need a TLS-terminating reverse proxy in front of nginx (or nginx configured for TLS itself)
+  before it could work from a real client over the network at all, let alone safely.
+
+Both are demo simplifications made on purpose to keep `docker compose up` a one-command story;
+neither is an Axon limitation - they're standard concerns for any containerized deployment.
 
 ## What this proves
 
@@ -83,6 +104,7 @@ instance directly and confirming the same cookie is then accepted by the other t
 ## Files
 
 - `docker-compose.yml` — the stack.
+- `.env.example` — copy to `.env` to supply `SQL_SA_PASSWORD` (`.env` itself is gitignored).
 - `nginx.conf` — split-upstream proxy (round-robin for job dispatch, sticky-per-IP for the dashboard/API) with WebSocket upgrade support (required for SignalR).
 - `../examples/Axon.Example.Server/` — minimal server-only host (SQL storage + Redis backplane + dashboard auth + job cleanup, all opted into).
 - `../examples/Axon.Example.Client/` — minimal client-only host with a few HTTP endpoints to trigger jobs.

@@ -5,7 +5,7 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "Ax0n!DemoPassw0rd"
+      MSSQL_SA_PASSWORD: "${SQL_SA_PASSWORD}"
     ports:
       - "1433:1433"
     volumes:
@@ -33,7 +33,7 @@ services:
       dockerfile: examples/Axon.Example.Server/Dockerfile
     environment:
       ASPNETCORE_URLS: "http://+:8080"
-      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=Ax0n!DemoPassw0rd;TrustServerCertificate=True"
+      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True"
       Axon__RedisConnectionString: "redis:6379"
       Axon__InstanceName: "server1"
       Axon__DataProtectionKeysPath: "/keys"
@@ -53,7 +53,7 @@ services:
       dockerfile: examples/Axon.Example.Server/Dockerfile
     environment:
       ASPNETCORE_URLS: "http://+:8080"
-      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=Ax0n!DemoPassw0rd;TrustServerCertificate=True"
+      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True"
       Axon__RedisConnectionString: "redis:6379"
       Axon__InstanceName: "server2"
       Axon__DataProtectionKeysPath: "/keys"
@@ -73,7 +73,7 @@ services:
       dockerfile: examples/Axon.Example.Server/Dockerfile
     environment:
       ASPNETCORE_URLS: "http://+:8080"
-      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=Ax0n!DemoPassw0rd;TrustServerCertificate=True"
+      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True"
       Axon__RedisConnectionString: "redis:6379"
       Axon__InstanceName: "server3"
       Axon__DataProtectionKeysPath: "/keys"
