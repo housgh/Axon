@@ -7,7 +7,7 @@ namespace Axon.Server.Services;
 /// storage to publish presence to other instances. True multi-instance visibility requires
 /// AddAxonSqlServerStore (see AxonSqlServerInstanceStore).
 /// </summary>
-public class InMemoryAxonServerInstanceStore : IAxonServerInstanceStore
+internal class InMemoryAxonServerInstanceStore : IAxonServerInstanceStore
 {
     private ServerInstance? _self;
     private readonly object _lock = new();

@@ -27,6 +27,13 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Lets tests exercise the in-memory store/registry implementations and internal auth
+             helpers (PasswordHasher, LoginAttemptTracker, DashboardUserCredentialStore) directly,
+             now that they're internal rather than accidentally-public implementation details. -->
+        <InternalsVisibleTo Include="Axon.Tests.Unit" />
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="..\README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 

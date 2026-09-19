@@ -2,7 +2,7 @@ using Axon.Server.Interfaces;
 
 namespace Axon.Server.Services;
 
-public class InMemoryAxonRecurringJobStore : IAxonRecurringJobStore
+internal class InMemoryAxonRecurringJobStore : IAxonRecurringJobStore
 {
     private readonly Dictionary<string, RecurringJob> _recurringJobs = new();
     private readonly object _lock = new();

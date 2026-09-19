@@ -31,7 +31,7 @@ public interface IDeviceConnectionRegistry
 /// since there's no shared storage to publish presence to other instances. True multi-instance
 /// visibility requires AddAxonSqlServerStore (see AxonSqlServerDeviceConnectionStore).
 /// </summary>
-public class InMemoryDeviceConnectionRegistry : IDeviceConnectionRegistry
+internal class InMemoryDeviceConnectionRegistry : IDeviceConnectionRegistry
 {
     private readonly ConcurrentDictionary<string, (string ConnectionId, long ConnectedAt)> _deviceToConnection = new();
 

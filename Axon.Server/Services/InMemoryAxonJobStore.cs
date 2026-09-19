@@ -3,7 +3,7 @@ using Axon.Server.Interfaces;
 
 namespace Axon.Server.Services;
 
-public class InMemoryAxonJobStore : IAxonJobStore
+internal class InMemoryAxonJobStore : IAxonJobStore
 {
     private readonly List<Job> _jobs = [];
     private readonly List<JobHistoryEntry> _history = [];

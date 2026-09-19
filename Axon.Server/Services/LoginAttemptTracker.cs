@@ -8,7 +8,7 @@ namespace Axon.Server.Services;
 /// key before the request body is read, so it can only key on IP cheaply; this tracker covers
 /// the other axis - a distributed attempt against one specific username from many different IPs.
 /// </summary>
-public class LoginAttemptTracker
+internal class LoginAttemptTracker
 {
     private const int MaxFailuresBeforeLockout = 5;
     private static readonly TimeSpan LockoutWindow = TimeSpan.FromMinutes(5);

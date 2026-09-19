@@ -10,7 +10,7 @@ namespace Axon.Server.Services;
 /// startup (see <see cref="DependencyInjection.AddAuthentication"/>) and only the salted hash is
 /// held afterward and compared against on each login attempt.
 /// </summary>
-public static class PasswordHasher
+internal static class PasswordHasher
 {
     private const int SaltSize = 16;
     private const int HashSize = 32;

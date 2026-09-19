@@ -7,7 +7,7 @@ namespace Axon.Server.Services;
 /// DashboardAuthOptions.Users directly, so the plaintext password is never what's compared
 /// against on each request.
 /// </summary>
-public class DashboardUserCredentialStore
+internal class DashboardUserCredentialStore
 {
     private readonly Dictionary<string, string> _hashesByUsername;
 
