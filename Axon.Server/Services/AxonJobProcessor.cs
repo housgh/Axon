@@ -142,6 +142,7 @@ public class Job : JobInfo
         MethodName = jobInfo.MethodName;
         Assembly = jobInfo.Assembly;
         DeclaringType = jobInfo.DeclaringType;
+        RetryPolicy = jobInfo.RetryPolicy;
     }
     public string DeviceName { get; set; } = null!;
     public string JobId { get; set; } = null!;

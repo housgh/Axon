@@ -27,14 +27,20 @@ public class AxonJobService(IAxonJobStore jobStore, IAxonDashboardNotifier notif
         activity?.SetTag("axon.job_id", jobId);
         activity?.SetTag("axon.device_name", deviceName);
 
-        await jobStore.AddJob(new Job(jobInfo)
+        var job = new Job(jobInfo)
         {
             JobId = jobId,
             DeviceName = deviceName,
             ScheduledFor = scheduledFor,
             State = scheduledFor is null ? JobState.Enqueued : JobState.Scheduled,
             EnqueuedAt = DateTime.UtcNow.Ticks
-        });
+        };
+        if (jobInfo.RetryPolicy is { MaxAttempts: > 0 } policy)
+        {
+            job.MaxAttempts = policy.MaxAttempts;
+        }
+
+        await jobStore.AddJob(job);
         AxonInstrumentation.JobsEnqueued.Add(1);
         await notifier.JobsChanged();
     }
@@ -73,7 +79,7 @@ public class AxonJobService(IAxonJobStore jobStore, IAxonDashboardNotifier notif
         // runs), so retry only while at least one more attempt would still fit under MaxAttempts.
         if (job.Attempts + 1 < job.MaxAttempts)
         {
-            var backoff = RetryBackoff[Math.Min(job.Attempts, RetryBackoff.Length - 1)];
+            var backoff = GetBackoff(job);
             await jobStore.RequeueForRetry(job.JobId, DateTime.UtcNow.Add(backoff).Ticks, $"Retrying in {backoff}");
             AxonInstrumentation.JobsRetried.Add(1);
         }
@@ -83,6 +89,20 @@ public class AxonJobService(IAxonJobStore jobStore, IAxonDashboardNotifier notif
             AxonInstrumentation.JobsFailed.Add(1);
         }
         await notifier.JobsChanged();
+    }
+
+    private static TimeSpan GetBackoff(Job job)
+    {
+        var delaysSeconds = job.RetryPolicy?.RetryDelaysSeconds;
+        if (delaysSeconds is { Count: > 0 })
+        {
+            // Past the configured entries, reuse the last one for every subsequent retry -
+            // mirrors the fallback behavior of the built-in RetryBackoff array below.
+            var index = Math.Min(job.Attempts, delaysSeconds.Count - 1);
+            return TimeSpan.FromSeconds(delaysSeconds[index]);
+        }
+
+        return RetryBackoff[Math.Min(job.Attempts, RetryBackoff.Length - 1)];
     }
 }
 

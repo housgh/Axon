@@ -1,4 +1,5 @@
 using Axon.Client.Services;
+using Axon.Core.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Axon.Example.Controllers;
@@ -26,6 +27,14 @@ public class WeatherForecastController(IAxonClient axonClient) : ControllerBase
     public async Task<IActionResult> FailTest()
     {
         var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.AlwaysThrows());
+        return Ok(new { JobId = jobId });
+    }
+
+    [HttpGet("fail-test-custom-retry")]
+    public async Task<IActionResult> FailTestCustomRetry()
+    {
+        var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.AlwaysThrows(),
+            retryPolicy: new AxonRetryPolicy { MaxAttempts = 2, RetryDelaysSeconds = [2] });
         return Ok(new { JobId = jobId });
     }
 

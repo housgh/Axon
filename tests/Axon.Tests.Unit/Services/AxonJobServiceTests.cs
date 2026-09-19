@@ -146,4 +146,60 @@ public class AxonJobServiceTests
 
         await _jobStore.Received(1).RequeueForRetry("job-1", Arg.Is<long>(scheduledFor => scheduledFor > before), Arg.Any<string?>());
     }
+
+    [Fact]
+    public async Task EnqueueAsync_WithRetryPolicy_OverridesDefaultMaxAttempts()
+    {
+        var jobInfo = new JobInfo
+        {
+            MethodName = "M", Assembly = "A", DeclaringType = "T", Arguments = [],
+            RetryPolicy = new AxonRetryPolicy { MaxAttempts = 7, RetryDelaysSeconds = [1, 2, 3] }
+        };
+
+        await _sut.EnqueueAsync("device-1", "job-1", jobInfo, scheduledFor: null);
+
+        await _jobStore.Received(1).AddJob(Arg.Is<Job>(j => j.MaxAttempts == 7));
+    }
+
+    [Fact]
+    public async Task EnqueueAsync_WithoutRetryPolicy_KeepsDefaultMaxAttempts()
+    {
+        var jobInfo = new JobInfo { MethodName = "M", Assembly = "A", DeclaringType = "T", Arguments = [] };
+
+        await _sut.EnqueueAsync("device-1", "job-1", jobInfo, scheduledFor: null);
+
+        await _jobStore.Received(1).AddJob(Arg.Is<Job>(j => j.MaxAttempts == 3));
+    }
+
+    [Fact]
+    public async Task MarkFailedAsync_WithCustomRetryDelays_UsesConfiguredDelayForAttempt()
+    {
+        var job = JobFactory.CreateJob("job-1", state: JobState.Processing, attempts: 0, maxAttempts: 10,
+            retryPolicy: new AxonRetryPolicy { MaxAttempts = 10, RetryDelaysSeconds = [5, 50, 500] });
+        _jobStore.GetJob("job-1").Returns(job);
+        var before = DateTime.UtcNow;
+
+        await _sut.MarkFailedAsync("job-1", "boom");
+
+        await _jobStore.Received(1).RequeueForRetry("job-1",
+            Arg.Is<long>(scheduledFor => new DateTime(scheduledFor) >= before.AddSeconds(5) && new DateTime(scheduledFor) < before.AddSeconds(50)),
+            Arg.Any<string?>());
+    }
+
+    [Fact]
+    public async Task MarkFailedAsync_CustomRetryDelaysExhausted_ReusesLastDelay()
+    {
+        // Attempts=2 is past the 2 entries in RetryDelaysSeconds (indices 0,1), so it should
+        // fall back to the last entry (index 1 = 50s) rather than throwing or using the default.
+        var job = JobFactory.CreateJob("job-1", state: JobState.Processing, attempts: 2, maxAttempts: 10,
+            retryPolicy: new AxonRetryPolicy { MaxAttempts = 10, RetryDelaysSeconds = [5, 50] });
+        _jobStore.GetJob("job-1").Returns(job);
+        var before = DateTime.UtcNow;
+
+        await _sut.MarkFailedAsync("job-1", "boom");
+
+        await _jobStore.Received(1).RequeueForRetry("job-1",
+            Arg.Is<long>(scheduledFor => new DateTime(scheduledFor) >= before.AddSeconds(50) && new DateTime(scheduledFor) < before.AddSeconds(60)),
+            Arg.Any<string?>());
+    }
 }

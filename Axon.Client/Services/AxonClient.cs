@@ -7,12 +7,12 @@ namespace Axon.Client.Services;
 
 public interface IAxonClient
 {
-    Task<string> EnqueueAsync(Expression<Action> methodCall);
-    Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall);
-    Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall);
-    Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall);
-    Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall);
-    Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall);
+    Task<string> EnqueueAsync(Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null);
+    Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null);
+    Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null);
+    Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null);
+    Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null);
+    Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null);
     Task AddOrUpdateRecurringAsync(string recurringJobId, string cronExpression, Expression<Action> methodCall);
     Task AddOrUpdateRecurringAsync<TType>(string recurringJobId, string cronExpression, Expression<Action<TType>> methodCall);
     Task RemoveRecurringAsync(string recurringJobId);
@@ -39,29 +39,29 @@ internal class AxonClient : IAxonClient
     private readonly HubConnection _hubConnection;
     private readonly string _deviceName;
 
-    public Task<string> EnqueueAsync(Expression<Action> methodCall) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall), null);
+    public Task<string> EnqueueAsync(Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), null);
 
-    public Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall), null);
+    public Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), null);
 
-    public Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall), DateTimeOffset.UtcNow.Add(delay));
+    public Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), DateTimeOffset.UtcNow.Add(delay));
 
-    public Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall), DateTimeOffset.UtcNow.Add(delay));
+    public Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), DateTimeOffset.UtcNow.Add(delay));
 
-    public Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall), scheduledFor);
+    public Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), scheduledFor);
 
-    public Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall), scheduledFor);
+    public Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null) =>
+        EnqueueInternalAsync(GetJobInfo(methodCall, retryPolicy), scheduledFor);
 
     public Task AddOrUpdateRecurringAsync(string recurringJobId, string cronExpression, Expression<Action> methodCall) =>
-        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall));
+        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null));
 
     public Task AddOrUpdateRecurringAsync<TType>(string recurringJobId, string cronExpression, Expression<Action<TType>> methodCall) =>
-        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall));
+        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null));
 
     public Task RemoveRecurringAsync(string recurringJobId) =>
         _hubConnection.InvokeAsync("RemoveRecurring", recurringJobId);
@@ -85,7 +85,7 @@ internal class AxonClient : IAxonClient
         return jobId;
     }
 
-    private static JobInfo? GetJobInfo(LambdaExpression methodCall)
+    private static JobInfo? GetJobInfo(LambdaExpression methodCall, AxonRetryPolicy? retryPolicy)
     {
         if (methodCall.Body is not MethodCallExpression call) return null;
         return new JobInfo
@@ -94,6 +94,7 @@ internal class AxonClient : IAxonClient
             Assembly = call.Method.DeclaringType!.Assembly.FullName!,
             MethodName = call.Method.Name,
             DeclaringType = call.Method.DeclaringType!.FullName!,
+            RetryPolicy = retryPolicy,
         };
     }
 

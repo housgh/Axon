@@ -17,6 +17,7 @@ BEGIN
         MaxAttempts       INT        NOT NULL DEFAULT 3,
         ProcessingDeadline BIGINT    NULL,
         EnqueuedAt        BIGINT     NOT NULL DEFAULT 0,
+        RetryPolicy       NVARCHAR(MAX) NULL,
         IsDeleted         BIT        NOT NULL DEFAULT 0
     );
 
@@ -39,6 +40,13 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'EnqueuedAt')
 BEGIN
     ALTER TABLE Jobs ADD EnqueuedAt BIGINT NOT NULL DEFAULT 0;
+END
+
+-- Per-job retry override (max attempts + backoff schedule), JSON-serialized. NULL means "use
+-- Axon.Server's built-in default backoff".
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'RetryPolicy')
+BEGIN
+    ALTER TABLE Jobs ADD RetryPolicy NVARCHAR(MAX) NULL;
 END
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'JobHistory')

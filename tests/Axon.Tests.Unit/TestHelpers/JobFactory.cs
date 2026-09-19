@@ -14,13 +14,15 @@ internal static class JobFactory
         int maxAttempts = 3,
         long? scheduledFor = null,
         long? processingDeadline = null,
-        long enqueuedAt = 0) =>
+        long enqueuedAt = 0,
+        AxonRetryPolicy? retryPolicy = null) =>
         new(new JobInfo
         {
             MethodName = "DoWork",
             Assembly = "Axon.Tests",
             DeclaringType = "Axon.Tests.SomeType",
-            Arguments = []
+            Arguments = [],
+            RetryPolicy = retryPolicy
         })
         {
             JobId = jobId ?? Guid.NewGuid().ToString(),

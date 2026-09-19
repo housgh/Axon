@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Axon.Core.Enums;
+using Axon.Core.Models;
 using Axon.SqlServer;
 using Axon.Tests.Integration.TestHelpers;
 using FluentAssertions;
@@ -29,6 +30,32 @@ public class AxonSqlServerStoreTests(SqlServerFixture fixture)
         // JsonElement rather than the original CLR types - compare via their JSON representation.
         JsonSerializer.Serialize(result.Arguments).Should().Be(JsonSerializer.Serialize(job.Arguments));
         result.State.Should().Be(JobState.Enqueued);
+    }
+
+    [Fact]
+    public async Task AddJob_WithRetryPolicy_RoundTripsThroughSqlServer()
+    {
+        var sut = CreateSut();
+        var job = JobFactory.CreateJob(retryPolicy: new AxonRetryPolicy { MaxAttempts = 9, RetryDelaysSeconds = [5, 15, 45] });
+
+        await sut.AddJob(job);
+        var result = await sut.GetJob(job.JobId);
+
+        result!.RetryPolicy.Should().NotBeNull();
+        result.RetryPolicy!.MaxAttempts.Should().Be(9);
+        result.RetryPolicy.RetryDelaysSeconds.Should().Equal(5, 15, 45);
+    }
+
+    [Fact]
+    public async Task AddJob_WithoutRetryPolicy_RetryPolicyIsNullAfterRoundTrip()
+    {
+        var sut = CreateSut();
+        var job = JobFactory.CreateJob();
+
+        await sut.AddJob(job);
+        var result = await sut.GetJob(job.JobId);
+
+        result!.RetryPolicy.Should().BeNull();
     }
 
     [Fact]

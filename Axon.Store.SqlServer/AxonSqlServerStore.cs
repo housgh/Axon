@@ -13,6 +13,7 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
     static AxonSqlServerStore()
     {
         SqlMapper.AddTypeHandler(new JobArgumentsTypeHandler());
+        SqlMapper.AddTypeHandler(new JobRetryPolicyTypeHandler());
     }
 
     private SqlConnection CreateConnection() =>
@@ -40,9 +41,9 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
 
         const string sql = @"
             INSERT INTO Jobs
-            (JobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, ScheduledFor, State, Attempts, MaxAttempts, EnqueuedAt, IsDeleted)
+            (JobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, ScheduledFor, State, Attempts, MaxAttempts, EnqueuedAt, RetryPolicy, IsDeleted)
             VALUES
-            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, @EnqueuedAt, 0)";
+            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, @EnqueuedAt, @RetryPolicy, 0)";
         await conn.ExecuteAsync(sql, new
         {
             job.JobId,
@@ -55,7 +56,8 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
             State = (int)job.State,
             job.Attempts,
             job.MaxAttempts,
-            job.EnqueuedAt
+            job.EnqueuedAt,
+            job.RetryPolicy
         }, tx);
         await AppendHistory(conn, tx, job.JobId, job.State, null);
 

@@ -178,6 +178,15 @@ public class MyClass
 }
 ```
 
+By default, a failed job retries up to 3 times with 10s/30s/2min backoff. Override this per job with an `AxonRetryPolicy` on `EnqueueAsync`/`ScheduleAsync`:
+
+```csharp
+var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.WriteHelloWorld("Hello World"),
+    retryPolicy: new AxonRetryPolicy { MaxAttempts = 5, RetryDelaysSeconds = [5, 30, 120] });
+```
+
+`MaxAttempts` is the total attempts including the first (so `5` means up to 4 retries). `RetryDelaysSeconds` is indexed by retry attempt (0-based); once exhausted, the last entry is reused for every further retry — so `[5, 30, 120]` with `MaxAttempts = 10` retries at 5s, 30s, then 120s, 120s, 120s, ... for the remaining attempts.
+
 Recurring jobs use standard cron expressions and are idempotent by `recurringJobId` — calling `AddOrUpdateRecurringAsync` again with the same id updates the existing schedule instead of creating a duplicate:
 
 ```csharp
