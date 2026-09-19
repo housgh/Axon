@@ -23,12 +23,17 @@ public class AxonRecurringJobProcessor(
 
             foreach (var recurringJob in recurringJobs.Where(r => r.NextRunAt <= now.UtcTicks))
             {
+                using var activity = AxonInstrumentation.ActivitySource.StartActivity("axon.recurring_job.trigger");
+                activity?.SetTag("axon.recurring_job_id", recurringJob.RecurringJobId);
+
                 await jobStore.AddJob(new Job(recurringJob)
                 {
                     JobId = Guid.NewGuid().ToString(),
                     DeviceName = recurringJob.DeviceName,
-                    State = JobState.Enqueued
+                    State = JobState.Enqueued,
+                    EnqueuedAt = now.UtcTicks
                 });
+                AxonInstrumentation.RecurringJobsTriggered.Add(1);
                 await notifier.JobsChanged();
 
                 try

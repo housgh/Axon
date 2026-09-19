@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Axon.Core.Enums;
 using Axon.Core.Models;
 using Axon.Server.Hubs;
@@ -39,9 +40,24 @@ public class AxonJobProcessor(
         var orphaned = await jobStore.GetOrphanedProcessingJobs(DateTime.UtcNow.Ticks);
         foreach (var job in orphaned)
         {
+            using var activity = AxonInstrumentation.ActivitySource.StartActivity("axon.job.reclaim_orphaned");
+            activity?.SetTag("axon.job_id", job.JobId);
+            activity?.SetTag("axon.device_name", job.DeviceName);
+
             logger.LogWarning(
                 "Job {JobId} on device {DeviceName} exceeded its processing deadline; reclaiming",
                 job.JobId, job.DeviceName);
+            AxonInstrumentation.JobsOrphanedReclaimed.Add(1);
+
+            // ProcessingDeadline is claimedAt + ProcessingTimeout, so subtracting it back out
+            // recovers the claim time without needing a separate persisted "claimed at" column.
+            if (job.ProcessingDeadline is { } deadline)
+            {
+                var claimedAt = deadline - ProcessingTimeout.Ticks;
+                AxonInstrumentation.ExecutionDuration.Record(
+                    TimeSpan.FromTicks(DateTime.UtcNow.Ticks - claimedAt).TotalMilliseconds);
+            }
+
             await jobService.ReclaimOrphanedAsync(job);
         }
     }
@@ -51,6 +67,7 @@ public class AxonJobProcessor(
         var timestamp = DateTime.UtcNow.Ticks;
         var jobsToRun = await jobStore.GetJobs(take: int.MaxValue, states: [JobState.Enqueued, JobState.Scheduled]);
         jobsToRun = jobsToRun.Where(j => j.ScheduledFor is null || j.ScheduledFor < timestamp).ToList();
+        AxonInstrumentation.SetQueueDepth(jobsToRun.Count);
 
         foreach (var job in jobsToRun)
         {
@@ -60,6 +77,10 @@ public class AxonJobProcessor(
                 // Device is currently offline; leave the job in place and retry next poll.
                 continue;
             }
+
+            using var activity = AxonInstrumentation.ActivitySource.StartActivity("axon.job.dispatch");
+            activity?.SetTag("axon.job_id", job.JobId);
+            activity?.SetTag("axon.device_name", job.DeviceName);
 
             try
             {
@@ -73,19 +94,32 @@ public class AxonJobProcessor(
                 // instances to poll the same SQL-backed job store concurrently: at most one
                 // instance's claim can succeed for a given job, so at most one instance ever
                 // dispatches it.
-                var deadline = DateTime.UtcNow.Add(ProcessingTimeout).Ticks;
+                var claimedAt = DateTime.UtcNow;
+                var deadline = claimedAt.Add(ProcessingTimeout).Ticks;
                 var claimed = await jobStore.TryClaimJob(job.JobId, deadline, $"Dispatched to {job.DeviceName}");
                 if (!claimed)
                 {
                     // Another instance (or another poll cycle) already claimed this job.
+                    AxonInstrumentation.JobsClaimFailed.Add(1);
+                    activity?.SetTag("axon.claimed", false);
                     continue;
                 }
+
+                activity?.SetTag("axon.claimed", true);
+                AxonInstrumentation.JobsDispatched.Add(1);
+                if (job.EnqueuedAt > 0)
+                {
+                    AxonInstrumentation.DispatchLatency.Record(
+                        TimeSpan.FromTicks(claimedAt.Ticks - job.EnqueuedAt).TotalMilliseconds);
+                }
+
                 await notifier.JobsChanged();
                 await hubContext.Clients.Client(connectionId)
                     .SendCoreAsync("Invoke", [job.JobId, job], stoppingToken);
             }
             catch (Exception e)
             {
+                activity?.SetStatus(ActivityStatusCode.Error, e.Message);
                 logger.LogWarning(e, "Failed to dispatch job {JobId} to device {DeviceName}; will retry next poll", job.JobId, job.DeviceName);
             }
         }
@@ -115,6 +149,9 @@ public class Job : JobInfo
     public JobState State { get; set; } = JobState.Enqueued;
     public int Attempts { get; set; }
     public int MaxAttempts { get; set; } = 3;
+
+    /// <summary>When this job was first added to the store. Used only for the dispatch-latency metric.</summary>
+    public long EnqueuedAt { get; set; }
 
     /// <summary>
     /// While State is Processing, the point past which the job is considered orphaned

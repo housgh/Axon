@@ -40,9 +40,9 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
 
         const string sql = @"
             INSERT INTO Jobs
-            (JobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, ScheduledFor, State, Attempts, MaxAttempts, IsDeleted)
+            (JobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, ScheduledFor, State, Attempts, MaxAttempts, EnqueuedAt, IsDeleted)
             VALUES
-            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, 0)";
+            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, @EnqueuedAt, 0)";
         await conn.ExecuteAsync(sql, new
         {
             job.JobId,
@@ -54,7 +54,8 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
             job.ScheduledFor,
             State = (int)job.State,
             job.Attempts,
-            job.MaxAttempts
+            job.MaxAttempts,
+            job.EnqueuedAt
         }, tx);
         await AppendHistory(conn, tx, job.JobId, job.State, null);
 

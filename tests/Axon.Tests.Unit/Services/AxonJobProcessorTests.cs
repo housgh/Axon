@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using Axon.Core.Enums;
 using Axon.Server.Hubs;
 using Axon.Server.Interfaces;
@@ -98,5 +99,112 @@ public class AxonJobProcessorTests
         await DispatchDueJobsAsync();
 
         await _clientProxy.DidNotReceive().SendCoreAsync(Arg.Any<string>(), Arg.Any<object?[]>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchDueJobsAsync_ReportsQueueDepthAsCountOfDueJobs()
+    {
+        await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "offline-device", state: JobState.Enqueued));
+        await _jobStore.AddJob(JobFactory.CreateJob("job-2", deviceName: "offline-device", state: JobState.Enqueued));
+
+        var values = CollectGaugeValues<int>(AxonInstrumentation.QueueDepth, () => DispatchDueJobsAsync());
+
+        values.Should().Contain(2);
+    }
+
+    [Fact]
+    public async Task DispatchDueJobsAsync_OnSuccessfulClaim_RecordsDispatchedCounter()
+    {
+        await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued));
+        _deviceRegistry.Register("device-1", "conn-1");
+
+        var dispatchedCounts = CollectCounterValues<long>(AxonInstrumentation.JobsDispatched, () => DispatchDueJobsAsync());
+
+        dispatchedCounts.Sum().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DispatchDueJobsAsync_OnSuccessfulClaimWithEnqueuedAt_RecordsDispatchLatency()
+    {
+        var enqueuedAt = DateTime.UtcNow.AddSeconds(-1).Ticks;
+        await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued, enqueuedAt: enqueuedAt));
+        _deviceRegistry.Register("device-1", "conn-1");
+
+        var latencies = CollectHistogramValues<double>(AxonInstrumentation.DispatchLatency, () => DispatchDueJobsAsync());
+
+        latencies.Should().ContainSingle();
+        latencies[0].Should().BeGreaterThan(500);
+    }
+
+    [Fact]
+    public void DispatchDueJobsAsync_OnFailedClaim_RecordsClaimFailedCounter()
+    {
+        // A claim only fails when another poll cycle (or, in production, another Axon.Server
+        // instance) claims the job in the window between this cycle's GetJobs snapshot and its
+        // TryClaimJob call - a pre-claimed job wouldn't even appear in that snapshot, and
+        // InMemoryAxonJobStore's synchronous lock means two real DispatchDueJobsAsync calls never
+        // actually interleave in-process (that race is already covered against real concurrency by
+        // InMemoryAxonJobStoreTests and the SQL Server integration tests). Use a store double whose
+        // TryClaimJob always loses, to isolate just the processor's counter-recording behavior.
+        var jobStore = Substitute.For<IAxonJobStore>();
+        var job = JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued);
+        jobStore.GetJobs(0, int.MaxValue, Arg.Any<JobState[]>()).Returns([job]);
+        jobStore.TryClaimJob(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<string?>()).Returns(false);
+        jobStore.GetOrphanedProcessingJobs(Arg.Any<long>()).Returns([]);
+        _deviceRegistry.Register("device-1", "conn-1");
+        var sut = new AxonJobProcessor(_hubContext, jobStore, _jobService, _deviceRegistry, _notifier, Substitute.For<ILogger<AxonJobProcessor>>());
+        var method = typeof(AxonJobProcessor).GetMethod("DispatchDueJobsAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+        var claimFailedCounts = CollectCounterValues<long>(AxonInstrumentation.JobsClaimFailed,
+            () => (Task)method.Invoke(sut, [CancellationToken.None])!);
+
+        claimFailedCounts.Sum().Should().Be(1);
+    }
+
+    private static List<T> CollectCounterValues<T>(Counter<T> counter, Func<Task> action) where T : struct
+    {
+        var values = new List<T>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == counter.Meter.Name && instrument.Name == counter.Name)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<T>((_, measurement, _, _) => values.Add(measurement));
+        listener.Start();
+        action().GetAwaiter().GetResult();
+        return values;
+    }
+
+    private static List<T> CollectHistogramValues<T>(Histogram<T> histogram, Func<Task> action) where T : struct
+    {
+        var values = new List<T>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == histogram.Meter.Name && instrument.Name == histogram.Name)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<T>((_, measurement, _, _) => values.Add(measurement));
+        listener.Start();
+        action().GetAwaiter().GetResult();
+        return values;
+    }
+
+    private static List<T> CollectGaugeValues<T>(ObservableGauge<T> gauge, Func<Task> action) where T : struct
+    {
+        var values = new List<T>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, l) =>
+        {
+            if (instrument.Meter.Name == gauge.Meter.Name && instrument.Name == gauge.Name)
+                l.EnableMeasurementEvents(instrument);
+        };
+        listener.SetMeasurementEventCallback<T>((_, measurement, _, _) => values.Add(measurement));
+        listener.Start();
+        action().GetAwaiter().GetResult();
+        listener.RecordObservableInstruments();
+        return values;
     }
 }

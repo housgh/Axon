@@ -13,7 +13,8 @@ internal static class JobFactory
         int attempts = 0,
         int maxAttempts = 3,
         long? scheduledFor = null,
-        long? processingDeadline = null) =>
+        long? processingDeadline = null,
+        long enqueuedAt = 0) =>
         new(new JobInfo
         {
             MethodName = "DoWork",
@@ -28,6 +29,7 @@ internal static class JobFactory
             Attempts = attempts,
             MaxAttempts = maxAttempts,
             ScheduledFor = scheduledFor,
-            ProcessingDeadline = processingDeadline
+            ProcessingDeadline = processingDeadline,
+            EnqueuedAt = enqueuedAt
         };
 }

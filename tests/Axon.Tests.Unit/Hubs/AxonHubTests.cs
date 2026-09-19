@@ -5,6 +5,7 @@ using Axon.Server.Services;
 using Axon.Tests.Unit.TestHelpers;
 using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 
 namespace Axon.Tests.Unit.Hubs;
@@ -20,7 +21,7 @@ public class AxonHubTests
 
     public AxonHubTests()
     {
-        _sut = new AxonHub(_jobService, _recurringJobService, _deviceRegistry, _jobStore, _notifier)
+        _sut = new AxonHub(_jobService, _recurringJobService, _deviceRegistry, _jobStore, _notifier, Substitute.For<ILogger<AxonHub>>())
         {
             Context = Substitute.For<HubCallerContext>()
         };

@@ -35,6 +35,18 @@ public class AxonJobServiceTests
     }
 
     [Fact]
+    public async Task EnqueueAsync_SetsEnqueuedAtToNow()
+    {
+        var jobInfo = new JobInfo { MethodName = "M", Assembly = "A", DeclaringType = "T", Arguments = [] };
+        var before = DateTime.UtcNow.Ticks;
+
+        await _sut.EnqueueAsync("device-1", "job-1", jobInfo, scheduledFor: null);
+
+        var after = DateTime.UtcNow.Ticks;
+        await _jobStore.Received(1).AddJob(Arg.Is<Job>(j => j.EnqueuedAt >= before && j.EnqueuedAt <= after));
+    }
+
+    [Fact]
     public async Task EnqueueAsync_WithSchedule_AddsJobAsScheduled()
     {
         var jobInfo = new JobInfo { MethodName = "M", Assembly = "A", DeclaringType = "T", Arguments = [] };

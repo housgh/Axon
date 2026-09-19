@@ -23,24 +23,37 @@ public class AxonJobService(IAxonJobStore jobStore, IAxonDashboardNotifier notif
 
     public async Task EnqueueAsync(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor)
     {
+        using var activity = AxonInstrumentation.ActivitySource.StartActivity("axon.job.enqueue");
+        activity?.SetTag("axon.job_id", jobId);
+        activity?.SetTag("axon.device_name", deviceName);
+
         await jobStore.AddJob(new Job(jobInfo)
         {
             JobId = jobId,
             DeviceName = deviceName,
             ScheduledFor = scheduledFor,
-            State = scheduledFor is null ? JobState.Enqueued : JobState.Scheduled
+            State = scheduledFor is null ? JobState.Enqueued : JobState.Scheduled,
+            EnqueuedAt = DateTime.UtcNow.Ticks
         });
+        AxonInstrumentation.JobsEnqueued.Add(1);
         await notifier.JobsChanged();
     }
 
     public async Task MarkSucceededAsync(string jobId)
     {
+        using var activity = AxonInstrumentation.ActivitySource.StartActivity("axon.job.succeed");
+        activity?.SetTag("axon.job_id", jobId);
+
         await jobStore.UpdateState(jobId, JobState.Succeeded);
+        AxonInstrumentation.JobsSucceeded.Add(1);
         await notifier.JobsChanged();
     }
 
     public async Task MarkFailedAsync(string jobId, string? error = null)
     {
+        using var activity = AxonInstrumentation.ActivitySource.StartActivity("axon.job.fail");
+        activity?.SetTag("axon.job_id", jobId);
+
         var job = await jobStore.GetJob(jobId);
         if (job is null) return;
 
@@ -62,10 +75,12 @@ public class AxonJobService(IAxonJobStore jobStore, IAxonDashboardNotifier notif
         {
             var backoff = RetryBackoff[Math.Min(job.Attempts, RetryBackoff.Length - 1)];
             await jobStore.RequeueForRetry(job.JobId, DateTime.UtcNow.Add(backoff).Ticks, $"Retrying in {backoff}");
+            AxonInstrumentation.JobsRetried.Add(1);
         }
         else
         {
             await jobStore.UpdateState(job.JobId, JobState.Failed);
+            AxonInstrumentation.JobsFailed.Add(1);
         }
         await notifier.JobsChanged();
     }

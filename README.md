@@ -20,6 +20,7 @@ Axon.Server acts purely as a scheduler/dispatcher — it never executes your job
 | `Axon.Server` | The scheduler/dispatcher: SignalR hub, job store, background processors, and an admin dashboard. |
 | `Axon.Store.SqlServer` | SQL Server-backed persistence for `Axon.Server` (in-memory storage is used by default). |
 | `Axon.Server.Redis` | Redis SignalR backplane for `Axon.Server`, so job dispatch and dashboard push reach clients connected to any instance behind a load balancer. Optional, separate package so `Axon.Server` itself doesn't carry a Redis dependency; other backplane options may be added as their own packages later. |
+| `Axon.Server.OpenTelemetry` | Wires an OpenTelemetry SDK to `Axon.Server`'s built-in metrics and traces (queue depth, dispatch latency, job outcome counters, dispatch/enqueue/ack spans). Optional, separate package for the same reason as `Axon.Server.Redis`. |
 
 ## Installation
 
@@ -40,6 +41,12 @@ Add `Axon.Server.Redis` if you're running more than one `Axon.Server` instance b
 
 ```bash
 dotnet add package Axon.Server.Redis
+```
+
+Add `Axon.Server.OpenTelemetry` if you want metrics and traces for job dispatch, queue depth, and outcomes:
+
+```bash
+dotnet add package Axon.Server.OpenTelemetry
 ```
 
 ## Usage
@@ -107,7 +114,21 @@ builder.Services.AddAxonServer()
 
 Without this, a client's connection is pinned to whichever instance accepted it, so a job dispatched by instance A never reaches a client connected to instance B, and the dashboard's Servers/Clients tabs only ever show what's local to the instance serving that request (see below).
 
-### 4. Register the client
+### 4. (Optional) Register observability
+
+Chain `.AddOpenTelemetryObservability(...)` off `AddAxonServer()` to get metrics (queue depth, dispatch latency, job outcome counters) and traces (dispatch/enqueue/ack spans) for an OpenTelemetry SDK to collect:
+
+```csharp
+builder.Services.AddAxonServer()
+    .AddAxonDashboard()
+    .AddOpenTelemetryObservability(
+        configureMetrics: metrics => metrics.AddOtlpExporter(),
+        configureTracing: tracing => tracing.AddOtlpExporter());
+```
+
+This only registers Axon's meter/activity source with the SDK - configure whatever exporter you want (OTLP, console, Prometheus, etc.) via `configureMetrics`/`configureTracing`, the same way you would for any other OpenTelemetry SDK setup.
+
+### 5. Register the client
 
 Point the client at wherever `Axon.Server` is hosted (its own process, or a different microservice's address). This opens the SignalR/WebSocket connection (`/hubs/axon`) that the server dispatches jobs over:
 
@@ -115,7 +136,7 @@ Point the client at wherever `Axon.Server` is hosted (its own process, or a diff
 builder.Services.AddAxonClient(axonBaseUrl); // e.g. "https://localhost:7221"
 ```
 
-### 5. Map the server middleware and dashboard
+### 6. Map the server middleware and dashboard
 
 ```csharp
 app.UseAxonServer();
@@ -123,7 +144,7 @@ app.UseAxonServer();
 
 This maps the SignalR hub (`/hubs/axon`) and, if opted into in step 1, the `/axon` API/dashboard.
 
-### 6. Enqueue, schedule, and run recurring jobs
+### 7. Enqueue, schedule, and run recurring jobs
 
 Inject `IAxonClient` and call methods on any plain class — Axon serializes the method call as an expression tree, sends it to the server, and the server dispatches it back to a connected client for execution:
 
@@ -164,7 +185,7 @@ await axonClient.AddOrUpdateRecurringAsync<MyClass>(
 await axonClient.RemoveRecurringAsync("hourly-hello");
 ```
 
-### 7. Open the dashboard
+### 8. Open the dashboard
 
 Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password. The dashboard is organized into four tabs:
 - **Jobs** — job history, state, retry/delete.
@@ -181,6 +202,21 @@ See [Axon.Example](Axon.Example) for a complete, runnable ASP.NET Core project w
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for diagrams of the job dispatch flow, state machine, and crash/restart recovery.
+
+## Observability
+
+With `Axon.Server.OpenTelemetry` (see Usage above), `Axon.Server` emits:
+
+**Metrics** (meter `Axon.Server`):
+- `axon.jobs.enqueued`, `axon.jobs.dispatched`, `axon.jobs.claim_failed`, `axon.jobs.succeeded`, `axon.jobs.failed`, `axon.jobs.retried`, `axon.jobs.orphaned_reclaimed` — counters for each job-state transition.
+- `axon.jobs.queue_depth` — jobs currently `Enqueued`/`Scheduled`, as of the most recent poll cycle.
+- `axon.jobs.dispatch_latency` — time from a job being enqueued to being claimed for dispatch.
+- `axon.jobs.execution_duration` — time from dispatch (claim) to the client acknowledging success, failure, or being reclaimed as orphaned.
+- `axon.recurring_jobs.triggered` — recurring-job occurrences enqueued as a new job instance.
+
+**Traces** (activity source `Axon.Server`): spans around enqueue, claim/dispatch, success/failure acknowledgement, and orphan reclaim, tagged with `axon.job_id`/`axon.device_name`.
+
+These are plain `System.Diagnostics.Metrics`/`System.Diagnostics.ActivitySource` primitives — `Axon.Server` itself has no OpenTelemetry dependency, so they're emitted (at effectively zero cost) whether or not anything is listening. `Axon.Server.OpenTelemetry` just wires an OTel SDK to collect them; any other listener (including a host app's own OTel setup, via `AddMeter("Axon.Server")`/`AddSource("Axon.Server")`) can attach to them directly instead.
 
 ## Testing
 

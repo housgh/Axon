@@ -2,6 +2,7 @@ using Axon.Core.Models;
 using Axon.Server.Interfaces;
 using Axon.Server.Services;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 
 namespace Axon.Server.Hubs;
 
@@ -10,12 +11,13 @@ public class AxonHub(
     IAxonRecurringJobService recurringJobService,
     IDeviceConnectionRegistry deviceRegistry,
     IAxonJobStore jobStore,
-    IAxonDashboardNotifier notifier) : Hub<AxonHub>
+    IAxonDashboardNotifier notifier,
+    ILogger<AxonHub> logger) : Hub<AxonHub>
 {
 
     public override Task OnConnectedAsync()
     {
-        Console.WriteLine($"OnConnectedAsync called {Context.ConnectionId}");
+        logger.LogDebug("Connection {ConnectionId} connected", Context.ConnectionId);
         return Task.CompletedTask;
     }
 
@@ -51,13 +53,13 @@ public class AxonHub(
 
     public Task OnFail(string jobId, string error)
     {
-        Console.WriteLine($"Job {jobId} failed: {error}");
+        logger.LogWarning("Job {JobId} failed: {Error}", jobId, error);
         return jobService.MarkFailedAsync(jobId, error);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        Console.WriteLine($"OnDisconnectedAsync called {Context.ConnectionId}");
+        logger.LogDebug("Connection {ConnectionId} disconnected", Context.ConnectionId);
 
         var deviceName = deviceRegistry.GetDeviceName(Context.ConnectionId);
         deviceRegistry.Unregister(Context.ConnectionId);

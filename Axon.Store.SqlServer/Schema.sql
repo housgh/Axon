@@ -16,6 +16,7 @@ BEGIN
         Attempts          INT        NOT NULL DEFAULT 0,
         MaxAttempts       INT        NOT NULL DEFAULT 3,
         ProcessingDeadline BIGINT    NULL,
+        EnqueuedAt        BIGINT     NOT NULL DEFAULT 0,
         IsDeleted         BIT        NOT NULL DEFAULT 0
     );
 
@@ -31,6 +32,13 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('Jobs') AND name = 'IX_Jobs_Processing_Deadline')
 BEGIN
     CREATE INDEX IX_Jobs_Processing_Deadline ON Jobs (State, ProcessingDeadline) WHERE IsDeleted = 0;
+END
+
+-- Used only for the axon.jobs.dispatch_latency metric; existing rows default to 0, which
+-- AxonJobProcessor treats as "no data" and skips recording a latency sample for.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'EnqueuedAt')
+BEGIN
+    ALTER TABLE Jobs ADD EnqueuedAt BIGINT NOT NULL DEFAULT 0;
 END
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'JobHistory')

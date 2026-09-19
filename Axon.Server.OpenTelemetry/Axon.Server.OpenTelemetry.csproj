@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Axon.Server.OpenTelemetry</RootNamespace>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>Axon.Server.OpenTelemetry</PackageId>
+        <Description>Wires an OpenTelemetry SDK to Axon.Server's metrics (queue depth, dispatch latency, execution duration, job outcome counters) and traces (dispatch, claim, enqueue, ack spans).</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.9.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Axon.Server\Axon.Server.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+</Project>
