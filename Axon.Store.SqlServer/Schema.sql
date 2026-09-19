@@ -64,3 +64,16 @@ BEGIN
 
     CREATE INDEX IX_RecurringJobs_NextRunAt ON RecurringJobs (NextRunAt);
 END
+
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ServerInstances')
+BEGIN
+    CREATE TABLE ServerInstances
+    (
+        InstanceId  NVARCHAR(64)  NOT NULL PRIMARY KEY,
+        MachineName NVARCHAR(256) NOT NULL,
+        StartedAt   BIGINT        NOT NULL,
+        LastSeenAt  BIGINT        NOT NULL
+    );
+
+    CREATE INDEX IX_ServerInstances_LastSeenAt ON ServerInstances (LastSeenAt);
+END
