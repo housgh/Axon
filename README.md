@@ -163,6 +163,17 @@ See [Axon.Example](Axon.Example) for a complete, runnable ASP.NET Core project w
 
 See [docs/architecture.md](docs/architecture.md) for diagrams of the job dispatch flow, state machine, and crash/restart recovery.
 
+## Testing
+
+- `tests/Axon.Tests.Unit` — unit tests for the job/recurring-job services, `AxonJobProcessor`'s dispatch logic, `AxonHub`, and the in-memory store, using [NSubstitute](https://nsubstitute.github.io/) for mocking.
+- `tests/Axon.Tests.Integration` — integration tests for `Axon.Store.SqlServer` against a real SQL Server instance spun up via [Testcontainers](https://dotnet.testcontainers.org/) (requires Docker). These cover the same transactional-write and atomic-claim guarantees described above, including a 20-way concurrent `TryClaimJob` race to verify exactly one caller ever wins.
+
+```bash
+dotnet test
+```
+
+runs both projects; Docker must be running locally for the integration tests to start their SQL Server container.
+
 ## Status
 
 This is a proof of concept. See the [repository](https://github.com/housgh/Axon) for source, issues, and usage examples.
