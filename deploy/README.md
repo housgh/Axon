@@ -6,7 +6,8 @@ and **Redis** (SignalR backplane), with **1 `Axon.Client`** connecting through t
 
 ```
                     ┌──────────┐
-   client ────────▶ │  nginx   │ (round-robin, no sticky sessions)
+   client ────────▶ │  nginx   │ /hubs/axon: round-robin (job dispatch)
+   browser ───────▶ │          │ everything else: sticky per client IP (dashboard/API)
                     └────┬─────┘
               ┌──────────┼──────────┐
               ▼          ▼          ▼
@@ -38,8 +39,20 @@ Tear down with `docker compose down` (add `-v` to also drop the SQL Server and D
 ## What this proves
 
 - **Dispatch correctness across instances**: enqueue a batch (`/enqueue-many/50`) and watch the client's logs — every job runs exactly once, regardless of which of the 3 servers' `AxonJobProcessor` won the atomic claim race against the shared SQL Server job store (see [docs/architecture.md#multi-instance-dispatch-safety](../docs/architecture.md#multi-instance-dispatch-safety)).
-- **Backplane routing**: the client's single WebSocket connection lands on exactly one server instance (check `/axon/clients` on each of 8081/8082/8083 directly - only one will list it). A job claimed and dispatched by a *different* instance still reaches the client, because `Axon.Server.Redis`'s backplane fans the SignalR call out across all 3 processes.
-- **No sticky sessions needed**: nginx here is a plain round-robin proxy (see `nginx.conf`) - deliberately not configured for session affinity, to demonstrate that the backplane is what makes that unnecessary for dispatch.
+- **Backplane routing**: the client's single WebSocket connection (`/hubs/axon`, round-robin in `nginx.conf` - deliberately *not* sticky) lands on exactly one server instance (check `/axon/clients` on each of 8081/8082/8083 directly - only one will list it). A job claimed and dispatched by a *different* instance still reaches the client, because `Axon.Server.Redis`'s backplane fans the SignalR call out across all 3 processes. This is the thing this demo exists to prove, so that path is left un-sticky on purpose.
+
+## Why the dashboard traffic *is* sticky (and dispatch isn't)
+
+`nginx.conf` splits traffic into two upstreams: `/hubs/axon` (job dispatch) stays plain
+round-robin per above, but everything else - the dashboard pages, the JSON API, and the
+dashboard-push hub - is pinned per client IP via `ip_hash`. Axon's Servers/Clients views are
+inherently instance-local by design (each server only knows about connections/registrations made
+directly to it - see the Clients tab note in the main README), so without this, browsing the
+dashboard *through the load balancer* looks broken: every request could land on a different
+instance, so the Clients list (and which server's own heartbeat looks "freshest") appears to
+randomly flicker between showing data and showing nothing, even though nothing is actually wrong.
+Sticky dashboard routing fixes that browsing experience; it has no effect on dispatch
+correctness, which was already guaranteed independently of nginx.
 
 ## A real deployment lesson this setup surfaces
 
@@ -61,6 +74,6 @@ instance directly and confirming the same cookie is then accepted by the other t
 ## Files
 
 - `docker-compose.yml` — the stack.
-- `nginx.conf` — round-robin proxy with WebSocket upgrade support (required for SignalR).
+- `nginx.conf` — split-upstream proxy (round-robin for job dispatch, sticky-per-IP for the dashboard/API) with WebSocket upgrade support (required for SignalR).
 - `../examples/Axon.Example.Server/` — minimal server-only host (SQL storage + Redis backplane + dashboard auth + job cleanup, all opted into).
 - `../examples/Axon.Example.Client/` — minimal client-only host with a few HTTP endpoints to trigger jobs.
