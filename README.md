@@ -77,6 +77,8 @@ If you skip `.AddAuthentication(...)`, Axon logs a startup warning so an open da
 
 Axon's dashboard auth uses its own cookie scheme (`AxonDashboard`) and never sets itself as the app's default authentication scheme, so it coexists safely with a host app's own `AddAuthentication(...)` (JWT bearer, its own cookie, etc.) — enabling one doesn't override or get overridden by the other, regardless of registration order.
 
+Passwords are configured in plain text (matching most secrets-manager/env-var workflows) but are never stored or compared in plain text at runtime: each is hashed once at startup with PBKDF2-HMAC-SHA256 and a random per-user salt, and only that hash is held afterward. Login attempts are rate-limited two ways: by client IP (5 attempts per 5 minutes) and by username (5 failures locks that username out for 5 minutes, independent of which IP the attempts came from) — either can trip first depending on the attack shape. Every login attempt and every write action (job retry/delete, recurring-job trigger/delete) is logged under the `Axon.Server.Services.AxonAuditLog` category with the acting username, so audit events can be routed/retained separately from regular application logs without touching your logging configuration.
+
 Dashboard access is username/password with per-user roles: `Admin` users can view and take actions (retry, delete, trigger); `ReadOnly` users can only view. Configure one or more users (`appsettings.json`, environment variable, etc.):
 
 ```json

@@ -2,8 +2,6 @@
 
 using System.Reflection;
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using Axon.Core.Enums;
 using Axon.Server.Hubs;
 using Axon.Server.Interfaces;
@@ -12,7 +10,9 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -24,6 +24,7 @@ public static class DependencyInjection
     private const string AuthScheme = "AxonDashboard";
     private const string AuthPolicy = "AxonDashboardAuth";
     private const string WritePolicy = "AxonDashboardWrite";
+    private const string LoginRateLimitPolicy = "AxonLogin";
 
     // An instance is considered offline once its heartbeat (every 15s, see
     // AxonServerInstanceHeartbeat) is older than this - generous enough to absorb a couple of
@@ -62,14 +63,9 @@ public static class DependencyInjection
     private static string GetJobHtml() => _jobHtml ??= GetEmbeddedResource("Dashboard.job.html");
     private static byte[] GetFaviconBytes() => _faviconBytes ??= GetEmbeddedResourceBytes("Dashboard.axon.ico");
 
-    private static bool PasswordsMatch(string a, string b)
-    {
-        // Compare fixed-size hashes in constant time so neither a length mismatch
-        // nor a byte mismatch can be inferred from response timing.
-        var aHash = SHA256.HashData(Encoding.UTF8.GetBytes(a));
-        var bHash = SHA256.HashData(Encoding.UTF8.GetBytes(b));
-        return CryptographicOperations.FixedTimeEquals(aHash, bHash);
-    }
+    // Falls back to "anonymous" rather than throwing when auth isn't configured (writes are open
+    // in that mode) or the identity is otherwise unnamed, so audit logging never breaks a request.
+    private static string GetAuditUsername(HttpContext http) => http.User.Identity?.Name ?? "anonymous";
 
     public static AxonServerBuilder AddAxonServer(this IServiceCollection services)
     {
@@ -120,6 +116,29 @@ public static class DependencyInjection
         if (authOptions.Users.Select(u => u.Username).Distinct(StringComparer.OrdinalIgnoreCase).Count() != authOptions.Users.Count)
             throw new InvalidOperationException("Axon dashboard usernames must be unique.");
         services.AddSingleton(authOptions);
+        services.AddSingleton(new DashboardUserCredentialStore(authOptions));
+
+        // Keyed by IP: the request body (which carries the username) isn't available
+        // synchronously when the rate limiter picks a partition, before the endpoint has run - so
+        // IP is the only cheap partition key at this layer. This still bounds the same attacker
+        // hammering many usernames from one IP; the login handler's separate per-username lockout
+        // (below) bounds a distributed attempt against one specific username from many IPs.
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddPolicy(LoginRateLimitPolicy, http =>
+                RateLimitPartition.GetSlidingWindowLimiter(
+                    http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    _ => new SlidingWindowRateLimiterOptions
+                    {
+                        PermitLimit = 5,
+                        Window = TimeSpan.FromMinutes(5),
+                        SegmentsPerWindow = 5,
+                        QueueLimit = 0
+                    }));
+        });
+
+        services.AddSingleton<LoginAttemptTracker>();
 
         // No default scheme is set here (AddAuthentication() takes no scheme argument): setting one
         // would overwrite AuthenticationOptions.DefaultScheme app-wide, silently breaking a host
@@ -181,6 +200,7 @@ public static class DependencyInjection
         {
             app.UseAuthentication();
             app.UseAuthorization();
+            app.UseRateLimiter(); // the /login endpoint's LoginRateLimitPolicy is only registered when auth is configured
         }
 
         app.MapHub<AxonHub>("/hubs/axon");
@@ -238,16 +258,29 @@ public static class DependencyInjection
 
         if (authEnabled)
         {
-            axon.MapPost("/login", async (HttpContext http, DashboardLoginRequest request, DashboardAuthOptions authOptions) =>
+            axon.MapPost("/login", async (
+                HttpContext http, DashboardLoginRequest request, DashboardAuthOptions authOptions,
+                DashboardUserCredentialStore credentials, LoginAttemptTracker attempts, ILogger<AxonAuditLog> auditLogger) =>
             {
+                var remoteIp = http.Connection.RemoteIpAddress?.ToString();
+
+                if (!string.IsNullOrEmpty(request.Username) && attempts.IsLockedOut(request.Username))
+                {
+                    await Task.Delay(300);
+                    AxonAuditLog.LoginFailed(auditLogger, request.Username, remoteIp);
+                    return Results.StatusCode(StatusCodes.Status429TooManyRequests);
+                }
+
                 var user = string.IsNullOrEmpty(request.Username)
                     ? null
                     : authOptions.Users.FirstOrDefault(u => string.Equals(u.Username, request.Username, StringComparison.OrdinalIgnoreCase));
 
-                if (user is null || string.IsNullOrEmpty(request.Password) || !PasswordsMatch(request.Password, user.Password))
+                if (user is null || string.IsNullOrEmpty(request.Password) || !credentials.Verify(request.Username, request.Password))
                 {
                     // Constant-ish delay so failed attempts don't respond meaningfully faster than successful ones.
                     await Task.Delay(300);
+                    if (!string.IsNullOrEmpty(request.Username)) attempts.RecordFailure(request.Username);
+                    AxonAuditLog.LoginFailed(auditLogger, request.Username, remoteIp);
                     return Results.Unauthorized();
                 }
 
@@ -263,8 +296,10 @@ public static class DependencyInjection
                     ExpiresUtc = DateTimeOffset.UtcNow.AddHours(12)
                 });
 
+                attempts.RecordSuccess(user.Username);
+                AxonAuditLog.LoginSucceeded(auditLogger, user.Username, remoteIp);
                 return Results.NoContent();
-            }).AllowAnonymous();
+            }).AllowAnonymous().RequireRateLimiting(LoginRateLimitPolicy);
 
             axon.MapPost("/logout", async (HttpContext http) =>
             {
@@ -302,20 +337,22 @@ public static class DependencyInjection
                 return job is null ? Results.NotFound() : Results.Ok(job);
             });
 
-            var deleteJob = axon.MapDelete("/jobs/{jobId}", async (IAxonJobStore jobStore, IAxonDashboardNotifier notifier, string jobId) =>
+            var deleteJob = axon.MapDelete("/jobs/{jobId}", async (HttpContext http, IAxonJobStore jobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string jobId) =>
             {
                 await jobStore.DeleteJob(jobId);
                 await notifier.JobsChanged();
+                AxonAuditLog.JobDeleted(auditLogger, GetAuditUsername(http), jobId);
                 return Results.NoContent();
             });
 
-            var retryJob = axon.MapPost("/jobs/{jobId}/retry", async (IAxonJobStore jobStore, IAxonDashboardNotifier notifier, string jobId) =>
+            var retryJob = axon.MapPost("/jobs/{jobId}/retry", async (HttpContext http, IAxonJobStore jobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string jobId) =>
             {
                 var job = await jobStore.GetJob(jobId);
                 if (job is null) return Results.NotFound();
 
                 await jobStore.Requeue(jobId);
                 await notifier.JobsChanged();
+                AxonAuditLog.JobRetried(auditLogger, GetAuditUsername(http), jobId);
                 return Results.NoContent();
             });
 
@@ -357,15 +394,16 @@ public static class DependencyInjection
                 }));
             });
 
-            var deleteRecurring = axon.MapDelete("/recurring-jobs/{recurringJobId}", async (IAxonRecurringJobStore recurringJobStore, IAxonDashboardNotifier notifier, string recurringJobId) =>
+            var deleteRecurring = axon.MapDelete("/recurring-jobs/{recurringJobId}", async (HttpContext http, IAxonRecurringJobStore recurringJobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string recurringJobId) =>
             {
                 await recurringJobStore.Remove(recurringJobId);
                 await notifier.RecurringJobsChanged();
+                AxonAuditLog.RecurringJobDeleted(auditLogger, GetAuditUsername(http), recurringJobId);
                 return Results.NoContent();
             });
 
             var triggerRecurring = axon.MapPost("/recurring-jobs/{recurringJobId}/trigger", async (
-                IAxonRecurringJobStore recurringJobStore, IAxonJobStore jobStore, IAxonDashboardNotifier notifier, string recurringJobId) =>
+                HttpContext http, IAxonRecurringJobStore recurringJobStore, IAxonJobStore jobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string recurringJobId) =>
             {
                 var recurringJob = (await recurringJobStore.GetAll())
                     .FirstOrDefault(r => r.RecurringJobId == recurringJobId);
@@ -379,6 +417,7 @@ public static class DependencyInjection
                     State = JobState.Enqueued
                 });
                 await notifier.JobsChanged();
+                AxonAuditLog.RecurringJobTriggered(auditLogger, GetAuditUsername(http), recurringJobId, jobId);
 
                 return Results.Ok(new { jobId });
             });
