@@ -11,24 +11,31 @@ public class ConnectedDevice
 
 public interface IDeviceConnectionRegistry
 {
-    void Register(string deviceName, string connectionId);
-    void Unregister(string connectionId);
-    string? GetConnectionId(string deviceName);
-    string? GetDeviceName(string connectionId);
+    Task Register(string deviceName, string connectionId);
+    Task Unregister(string connectionId);
+    Task<string?> GetConnectionId(string deviceName);
+    Task<string?> GetDeviceName(string connectionId);
 
     /// <summary>
-    /// Devices with an open SignalR connection to this specific server instance. A SignalR
-    /// connection is pinned to whichever instance accepted it, so this never reflects clients
-    /// connected to other instances in a multi-instance deployment.
+    /// Devices with an open SignalR connection. The in-memory implementation only ever sees
+    /// connections accepted by this process (a SignalR connection is pinned to whichever instance
+    /// accepted it); AxonSqlServerDeviceConnectionStore (via AddAxonSqlServerStore) instead
+    /// publishes this across every instance, so this reflects the whole fleet's connected
+    /// devices regardless of which instance handles the request.
     /// </summary>
-    List<ConnectedDevice> GetAll();
+    Task<List<ConnectedDevice>> GetAll();
 }
 
-public class DeviceConnectionRegistry : IDeviceConnectionRegistry
+/// <summary>
+/// In-memory device registry: each process only ever sees devices connected directly to it,
+/// since there's no shared storage to publish presence to other instances. True multi-instance
+/// visibility requires AddAxonSqlServerStore (see AxonSqlServerDeviceConnectionStore).
+/// </summary>
+public class InMemoryDeviceConnectionRegistry : IDeviceConnectionRegistry
 {
     private readonly ConcurrentDictionary<string, (string ConnectionId, long ConnectedAt)> _deviceToConnection = new();
 
-    public void Register(string deviceName, string connectionId)
+    public Task Register(string deviceName, string connectionId)
     {
         // A re-Register (e.g. on SignalR auto-reconnect) with the same connection id shouldn't
         // reset ConnectedAt; only a genuinely new connection id counts as a fresh connection.
@@ -36,9 +43,10 @@ public class DeviceConnectionRegistry : IDeviceConnectionRegistry
             deviceName,
             _ => (connectionId, DateTime.UtcNow.Ticks),
             (_, existing) => existing.ConnectionId == connectionId ? existing : (connectionId, DateTime.UtcNow.Ticks));
+        return Task.CompletedTask;
     }
 
-    public void Unregister(string connectionId)
+    public Task Unregister(string connectionId)
     {
         foreach (var pair in _deviceToConnection)
         {
@@ -47,28 +55,29 @@ public class DeviceConnectionRegistry : IDeviceConnectionRegistry
                 _deviceToConnection.TryRemove(pair.Key, out _);
             }
         }
+        return Task.CompletedTask;
     }
 
-    public string? GetConnectionId(string deviceName)
+    public Task<string?> GetConnectionId(string deviceName)
     {
-        return _deviceToConnection.TryGetValue(deviceName, out var entry) ? entry.ConnectionId : null;
+        return Task.FromResult(_deviceToConnection.TryGetValue(deviceName, out var entry) ? entry.ConnectionId : null);
     }
 
-    public string? GetDeviceName(string connectionId)
+    public Task<string?> GetDeviceName(string connectionId)
     {
         foreach (var pair in _deviceToConnection)
         {
             if (pair.Value.ConnectionId == connectionId)
             {
-                return pair.Key;
+                return Task.FromResult<string?>(pair.Key);
             }
         }
-        return null;
+        return Task.FromResult<string?>(null);
     }
 
-    public List<ConnectedDevice> GetAll()
+    public Task<List<ConnectedDevice>> GetAll()
     {
-        return _deviceToConnection
+        return Task.FromResult(_deviceToConnection
             .Select(pair => new ConnectedDevice
             {
                 DeviceName = pair.Key,
@@ -76,6 +85,6 @@ public class DeviceConnectionRegistry : IDeviceConnectionRegistry
                 ConnectedAt = pair.Value.ConnectedAt
             })
             .OrderByDescending(d => d.ConnectedAt)
-            .ToList();
+            .ToList());
     }
 }

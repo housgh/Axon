@@ -21,29 +21,29 @@ public class AxonHub(
         return Task.CompletedTask;
     }
 
-    public Task Register(string deviceName)
+    public async Task Register(string deviceName)
     {
-        deviceRegistry.Register(deviceName, Context.ConnectionId);
-        return notifier.ClientsChanged();
+        await deviceRegistry.Register(deviceName, Context.ConnectionId);
+        await notifier.ClientsChanged();
     }
 
     public async Task Enqueue(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor)
     {
-        deviceRegistry.Register(deviceName, Context.ConnectionId);
+        await deviceRegistry.Register(deviceName, Context.ConnectionId);
         await notifier.ClientsChanged();
         await jobService.EnqueueAsync(deviceName, jobId, jobInfo, scheduledFor);
     }
 
     public async Task EnqueueContinuation(string deviceName, string jobId, JobInfo jobInfo, string parentJobId, bool continueOnParentFailure)
     {
-        deviceRegistry.Register(deviceName, Context.ConnectionId);
+        await deviceRegistry.Register(deviceName, Context.ConnectionId);
         await notifier.ClientsChanged();
         await jobService.EnqueueContinuationAsync(deviceName, jobId, jobInfo, parentJobId, continueOnParentFailure);
     }
 
     public async Task AddOrUpdateRecurring(string deviceName, string recurringJobId, JobInfo jobInfo, string cronExpression)
     {
-        deviceRegistry.Register(deviceName, Context.ConnectionId);
+        await deviceRegistry.Register(deviceName, Context.ConnectionId);
         await notifier.ClientsChanged();
         await recurringJobService.AddOrUpdateAsync(deviceName, recurringJobId, jobInfo, cronExpression);
     }
@@ -68,8 +68,8 @@ public class AxonHub(
     {
         logger.LogDebug("Connection {ConnectionId} disconnected", Context.ConnectionId);
 
-        var deviceName = deviceRegistry.GetDeviceName(Context.ConnectionId);
-        deviceRegistry.Unregister(Context.ConnectionId);
+        var deviceName = await deviceRegistry.GetDeviceName(Context.ConnectionId);
+        await deviceRegistry.Unregister(Context.ConnectionId);
         await notifier.ClientsChanged();
 
         // Any job this device was actively processing can no longer be acknowledged on this

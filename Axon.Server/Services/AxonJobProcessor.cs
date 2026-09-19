@@ -71,7 +71,7 @@ public class AxonJobProcessor(
 
         foreach (var job in jobsToRun)
         {
-            var connectionId = deviceRegistry.GetConnectionId(job.DeviceName);
+            var connectionId = await deviceRegistry.GetConnectionId(job.DeviceName);
             if (connectionId is null)
             {
                 // Device is currently offline; leave the job in place and retry next poll.

@@ -39,20 +39,29 @@ Tear down with `docker compose down` (add `-v` to also drop the SQL Server and D
 ## What this proves
 
 - **Dispatch correctness across instances**: enqueue a batch (`/enqueue-many/50`) and watch the client's logs — every job runs exactly once, regardless of which of the 3 servers' `AxonJobProcessor` won the atomic claim race against the shared SQL Server job store (see [docs/architecture.md#multi-instance-dispatch-safety](../docs/architecture.md#multi-instance-dispatch-safety)).
-- **Backplane routing**: the client's single WebSocket connection (`/hubs/axon`, round-robin in `nginx.conf` - deliberately *not* sticky) lands on exactly one server instance (check `/axon/clients` on each of 8081/8082/8083 directly - only one will list it). A job claimed and dispatched by a *different* instance still reaches the client, because `Axon.Server.Redis`'s backplane fans the SignalR call out across all 3 processes. This is the thing this demo exists to prove, so that path is left un-sticky on purpose.
+- **Backplane routing**: the client's single WebSocket connection (`/hubs/axon`, round-robin in `nginx.conf` - deliberately *not* sticky) lands on exactly one server instance's process. A job claimed and dispatched by a *different* instance still reaches the client, because `Axon.Server.Redis`'s backplane fans the SignalR call out across all 3 processes. This is the thing this demo exists to prove, so that path is left un-sticky on purpose. (`/axon/clients` will list the connected device on all 3 instances regardless - see below - so it doesn't reveal which one owns the actual WebSocket connection; the backplane fan-out is what you're really watching.)
 
-## Why the dashboard traffic *is* sticky (and dispatch isn't)
+## Why the Clients tab is fleet-wide (and dispatch isn't sticky)
 
-`nginx.conf` splits traffic into two upstreams: `/hubs/axon` (job dispatch) stays plain
-round-robin per above, but everything else - the dashboard pages, the JSON API, and the
-dashboard-push hub - is pinned per client IP via `ip_hash`. Axon's Servers/Clients views are
-inherently instance-local by design (each server only knows about connections/registrations made
-directly to it - see the Clients tab note in the main README), so without this, browsing the
-dashboard *through the load balancer* looks broken: every request could land on a different
-instance, so the Clients list (and which server's own heartbeat looks "freshest") appears to
-randomly flicker between showing data and showing nothing, even though nothing is actually wrong.
-Sticky dashboard routing fixes that browsing experience; it has no effect on dispatch
-correctness, which was already guaranteed independently of nginx.
+A SignalR connection is pinned to whichever server instance accepted it, so a naive in-memory
+connection registry would only ever know about the devices connected *directly* to that one
+process - browsing the dashboard through the load balancer would then make the Clients list
+(and the Servers tab's "freshest" heartbeat) appear to randomly flicker between instances, even
+though nothing is actually wrong. `Axon.Store.SqlServer` fixes this at the source rather than
+papering over it with routing tricks: `AddAxonSqlServerStore` swaps in
+`AxonSqlServerDeviceConnectionStore`, which publishes every `Register`/`Unregister` to a shared
+`DeviceConnections` table (mirroring how `AxonSqlServerInstanceStore` already made the Servers
+tab fleet-wide). Querying `/axon/clients` on any of the 3 instances - directly on 8081/8082/8083,
+or through nginx - now returns the same result, with no dependency on sticky sessions. A stale
+row left behind by an instance that died without a clean SignalR disconnect is filtered out by
+joining against that instance's `ServerInstances` heartbeat, the same staleness check the
+Servers tab already used for `IsOnline`.
+
+`nginx.conf` still splits traffic into two upstreams - `/hubs/axon` (job dispatch) stays plain
+round-robin so the demo continues to prove the Redis backplane, while everything else is pinned
+per client IP via `ip_hash` - but that stickiness is no longer what makes the Clients tab work.
+It remains in place mainly because sticky dashboard routing is cheap and harmless, and it still
+smooths over one unrelated wrinkle: see the Data Protection cookie note below.
 
 ## A real deployment lesson this setup surfaces
 

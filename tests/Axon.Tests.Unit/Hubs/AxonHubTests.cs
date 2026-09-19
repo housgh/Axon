@@ -33,7 +33,7 @@ public class AxonHubTests
     {
         await _sut.Register("device-1");
 
-        _deviceRegistry.Received(1).Register("device-1", "conn-1");
+        await _deviceRegistry.Received(1).Register("device-1", "conn-1");
         await _notifier.Received(1).ClientsChanged();
     }
 
@@ -62,7 +62,7 @@ public class AxonHubTests
 
         await _sut.OnDisconnectedAsync(null);
 
-        _deviceRegistry.Received(1).Unregister("conn-1");
+        await _deviceRegistry.Received(1).Unregister("conn-1");
         await _notifier.Received(1).ClientsChanged();
         await _jobService.Received(1).ReclaimOrphanedAsync(stranded);
     }

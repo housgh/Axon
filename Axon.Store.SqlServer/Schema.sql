@@ -133,3 +133,24 @@ BEGIN
 
     CREATE INDEX IX_ServerInstances_LastSeenAt ON ServerInstances (LastSeenAt);
 END
+
+-- Published device connections, so the dashboard's Clients tab reflects the whole fleet rather
+-- than only whichever instance happens to answer a given request (a SignalR connection is
+-- pinned to whichever instance accepted it, so without this each instance only knows about its
+-- own local connections). InstanceId identifies the owning instance so a row can be recognized
+-- as stale (see AxonSqlServerDeviceConnectionStore.GetAll) if that instance's ServerInstances
+-- heartbeat has gone quiet - covering the case where an instance dies without a clean
+-- SignalR disconnect to clean up after itself.
+IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DeviceConnections')
+BEGIN
+    CREATE TABLE DeviceConnections
+    (
+        DeviceName   NVARCHAR(256) NOT NULL PRIMARY KEY,
+        ConnectionId NVARCHAR(64)  NOT NULL,
+        InstanceId   NVARCHAR(64)  NOT NULL,
+        ConnectedAt  BIGINT        NOT NULL
+    );
+
+    CREATE INDEX IX_DeviceConnections_ConnectionId ON DeviceConnections (ConnectionId);
+    CREATE INDEX IX_DeviceConnections_InstanceId ON DeviceConnections (InstanceId);
+END

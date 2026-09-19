@@ -76,7 +76,7 @@ public static class DependencyInjection
         services.TryAddSingleton<IAxonJobStore, InMemoryAxonJobStore>();
         services.TryAddSingleton<IAxonRecurringJobStore, InMemoryAxonRecurringJobStore>();
         services.TryAddSingleton<IAxonServerInstanceStore, InMemoryAxonServerInstanceStore>();
-        services.AddSingleton<IDeviceConnectionRegistry, DeviceConnectionRegistry>();
+        services.TryAddSingleton<IDeviceConnectionRegistry, InMemoryDeviceConnectionRegistry>();
         services.AddSingleton<IAxonDashboardNotifier, AxonDashboardNotifier>();
         services.AddSingleton<IAxonJobService, AxonJobService>();
         services.AddScoped<IAxonRecurringJobService, AxonRecurringJobService>();
@@ -412,7 +412,7 @@ public static class DependencyInjection
 
             axon.MapGet("/clients", async (IDeviceConnectionRegistry deviceRegistry, IAxonJobStore jobStore) =>
             {
-                var clients = deviceRegistry.GetAll();
+                var clients = await deviceRegistry.GetAll();
                 var processingDevices = (await jobStore.GetJobs(take: int.MaxValue, states: [JobState.Processing]))
                     .Select(j => j.DeviceName)
                     .ToHashSet();

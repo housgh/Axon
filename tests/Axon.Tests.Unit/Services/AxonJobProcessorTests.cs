@@ -15,7 +15,7 @@ public class AxonJobProcessorTests
 {
     private readonly InMemoryAxonJobStore _jobStore = new();
     private readonly IAxonJobService _jobService = Substitute.For<IAxonJobService>();
-    private readonly IDeviceConnectionRegistry _deviceRegistry = new DeviceConnectionRegistry();
+    private readonly IDeviceConnectionRegistry _deviceRegistry = new InMemoryDeviceConnectionRegistry();
     private readonly IAxonDashboardNotifier _notifier = Substitute.For<IAxonDashboardNotifier>();
     private readonly IHubContext<AxonHub> _hubContext = Substitute.For<IHubContext<AxonHub>>();
     private readonly IHubClients _hubClients = Substitute.For<IHubClients>();
@@ -50,7 +50,7 @@ public class AxonJobProcessorTests
     public async Task DispatchDueJobsAsync_DeviceConnected_ClaimsAndDispatches()
     {
         await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued));
-        _deviceRegistry.Register("device-1", "conn-1");
+        await _deviceRegistry.Register("device-1", "conn-1");
 
         await DispatchDueJobsAsync();
 
@@ -77,7 +77,7 @@ public class AxonJobProcessorTests
     {
         var future = DateTime.UtcNow.AddHours(1).Ticks;
         await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Scheduled, scheduledFor: future));
-        _deviceRegistry.Register("device-1", "conn-1");
+        await _deviceRegistry.Register("device-1", "conn-1");
 
         await DispatchDueJobsAsync();
 
@@ -93,7 +93,7 @@ public class AxonJobProcessorTests
         // time this instance's poll cycle looks at it (GetJobs still returned it as due a moment
         // earlier), so TryClaimJob must fail and dispatch must not happen.
         await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued));
-        _deviceRegistry.Register("device-1", "conn-1");
+        await _deviceRegistry.Register("device-1", "conn-1");
         await _jobStore.TryClaimJob("job-1", processingDeadline: 999);
 
         await DispatchDueJobsAsync();
@@ -116,7 +116,7 @@ public class AxonJobProcessorTests
     public async Task DispatchDueJobsAsync_OnSuccessfulClaim_RecordsDispatchedCounter()
     {
         await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued));
-        _deviceRegistry.Register("device-1", "conn-1");
+        await _deviceRegistry.Register("device-1", "conn-1");
 
         var dispatchedCounts = CollectCounterValues<long>(AxonInstrumentation.JobsDispatched, () => DispatchDueJobsAsync());
 
@@ -128,7 +128,7 @@ public class AxonJobProcessorTests
     {
         var enqueuedAt = DateTime.UtcNow.AddSeconds(-1).Ticks;
         await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued, enqueuedAt: enqueuedAt));
-        _deviceRegistry.Register("device-1", "conn-1");
+        await _deviceRegistry.Register("device-1", "conn-1");
 
         var latencies = CollectHistogramValues<double>(AxonInstrumentation.DispatchLatency, () => DispatchDueJobsAsync());
 
@@ -137,7 +137,7 @@ public class AxonJobProcessorTests
     }
 
     [Fact]
-    public void DispatchDueJobsAsync_OnFailedClaim_RecordsClaimFailedCounter()
+    public async Task DispatchDueJobsAsync_OnFailedClaim_RecordsClaimFailedCounter()
     {
         // A claim only fails when another poll cycle (or, in production, another Axon.Server
         // instance) claims the job in the window between this cycle's GetJobs snapshot and its
@@ -151,7 +151,7 @@ public class AxonJobProcessorTests
         jobStore.GetJobs(0, int.MaxValue, Arg.Any<JobState[]>()).Returns([job]);
         jobStore.TryClaimJob(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<string?>()).Returns(false);
         jobStore.GetOrphanedProcessingJobs(Arg.Any<long>()).Returns([]);
-        _deviceRegistry.Register("device-1", "conn-1");
+        await _deviceRegistry.Register("device-1", "conn-1");
         var sut = new AxonJobProcessor(_hubContext, jobStore, _jobService, _deviceRegistry, _notifier, Substitute.For<ILogger<AxonJobProcessor>>());
         var method = typeof(AxonJobProcessor).GetMethod("DispatchDueJobsAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;

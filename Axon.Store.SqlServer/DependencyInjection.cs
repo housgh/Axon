@@ -1,6 +1,7 @@
 // ReSharper disable CheckNamespace
 
 using Axon.Server.Interfaces;
+using Axon.Server.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -16,5 +17,6 @@ public static class DependencyInjection
         services.Replace(ServiceDescriptor.Singleton<IAxonJobStore>(_ => new AxonSqlServerStore(connectionString)));
         services.Replace(ServiceDescriptor.Singleton<IAxonRecurringJobStore>(_ => new AxonSqlServerRecurringJobStore(connectionString)));
         services.Replace(ServiceDescriptor.Singleton<IAxonServerInstanceStore>(_ => new AxonSqlServerInstanceStore(connectionString)));
+        services.Replace(ServiceDescriptor.Singleton<IDeviceConnectionRegistry>(_ => new AxonSqlServerDeviceConnectionStore(connectionString)));
     }
 }

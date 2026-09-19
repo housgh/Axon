@@ -114,7 +114,7 @@ builder.Services.AddAxonServer()
     .AddAxonDashboard();
 ```
 
-Without this, a client's connection is pinned to whichever instance accepted it, so a job dispatched by instance A never reaches a client connected to instance B, and the dashboard's Servers/Clients tabs only ever show what's local to the instance serving that request (see below).
+Without this, a client's connection is pinned to whichever instance accepted it, so a job dispatched by instance A never reaches a client connected to instance B. (The dashboard's Servers/Clients tabs are a separate concern, fixed by `Axon.Store.SqlServer` rather than the backplane — see below.)
 
 ### 4. (Optional) Register observability
 
@@ -252,7 +252,7 @@ Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a conf
 - **Jobs** — job history, state, retry/delete.
 - **Recurring jobs** — schedules, last/next run, trigger/remove.
 - **Servers** — active `Axon.Server` instances, each heartbeating every 15s and shown offline once its heartbeat is more than 45s old. With the default in-memory store an instance only ever sees itself; use `Axon.Store.SqlServer` to see every instance behind a multi-instance deployment.
-- **Clients** — devices with an open connection to *this* server instance (a SignalR connection is pinned to whichever instance accepted it, so this list is always instance-local regardless of storage backend or backplane — `Axon.Server.Redis` makes dispatch/push reach the right client, but each instance still only lists the clients connected to itself), shown Idle or Processing depending on whether a job is currently dispatched to them.
+- **Clients** — connected devices, shown Idle or Processing depending on whether a job is currently dispatched to them. A SignalR connection is pinned to whichever instance accepted it, so with the default in-memory registry this list is instance-local (`Axon.Server.Redis` makes dispatch/push still reach the right client, but each instance only lists the clients connected to itself); use `Axon.Store.SqlServer` to see every connected client across the whole fleet, regardless of which instance it's connected to.
 
 `ReadOnly` users see the same data but without retry/delete/trigger controls.
 
