@@ -125,4 +125,82 @@ public class AxonSqlServerRecurringJobStoreTests(SqlServerFixture fixture)
         // rather than GetAll silently returning everything.
         ourIdsInPage.Count.Should().BeLessThanOrEqualTo(2);
     }
+
+    [Fact]
+    public async Task AddOrUpdate_NewRecurringJob_DefaultsToNotPaused()
+    {
+        var sut = CreateSut();
+        var job = CreateRecurringJob();
+
+        await sut.AddOrUpdate(job);
+
+        (await sut.GetById(job.RecurringJobId))!.IsPaused.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SetPaused_True_PausesTheJob()
+    {
+        var sut = CreateSut();
+        var job = CreateRecurringJob();
+        await sut.AddOrUpdate(job);
+
+        await sut.SetPaused(job.RecurringJobId, isPaused: true);
+
+        (await sut.GetById(job.RecurringJobId))!.IsPaused.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SetPaused_False_ResumesTheJob()
+    {
+        var sut = CreateSut();
+        var job = CreateRecurringJob();
+        await sut.AddOrUpdate(job);
+        await sut.SetPaused(job.RecurringJobId, isPaused: true);
+
+        await sut.SetPaused(job.RecurringJobId, isPaused: false);
+
+        (await sut.GetById(job.RecurringJobId))!.IsPaused.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AddOrUpdate_ExistingPausedJob_PreservesPausedState()
+    {
+        // A client re-registering an existing recurring job (AddOrUpdateRecurringAsync is
+        // idempotent by id, and runs on every client startup) has no isPaused concept of its own
+        // to declare - an operator's pause (set via SetPaused) must survive that re-registration.
+        var sut = CreateSut();
+        var job = CreateRecurringJob();
+        await sut.AddOrUpdate(job);
+        await sut.SetPaused(job.RecurringJobId, isPaused: true);
+
+        job.CronExpression = "*/5 * * * *";
+        await sut.AddOrUpdate(job);
+
+        (await sut.GetById(job.RecurringJobId))!.IsPaused.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SkipNext_AdvancesNextRunAt()
+    {
+        var sut = CreateSut();
+        var job = CreateRecurringJob();
+        await sut.AddOrUpdate(job);
+
+        await sut.SkipNext(job.RecurringJobId, newNextRunAt: 9999);
+
+        (await sut.GetById(job.RecurringJobId))!.NextRunAt.Should().Be(9999);
+    }
+
+    [Fact]
+    public async Task SkipNext_DoesNotChangePausedState()
+    {
+        var sut = CreateSut();
+        var job = CreateRecurringJob();
+        await sut.AddOrUpdate(job);
+        await sut.SetPaused(job.RecurringJobId, isPaused: true);
+
+        await sut.SkipNext(job.RecurringJobId, newNextRunAt: 9999);
+
+        (await sut.GetById(job.RecurringJobId))!.IsPaused.Should().BeTrue();
+    }
 }

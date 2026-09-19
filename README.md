@@ -246,6 +246,8 @@ await axonClient.AddOrUpdateRecurringAsync<MyClass>(
 await axonClient.RemoveRecurringAsync("hourly-hello");
 ```
 
+A recurring job can be paused, resumed, or skip its single next occurrence — from the dashboard's Recurring jobs tab, or directly via `POST /axon/recurring-jobs/{recurringJobId}/pause`, `.../resume`, `.../skip-next`. Pausing leaves the existing `NextRunAt` untouched (the poll loop just skips it entirely while paused), so resuming picks the schedule back up rather than recomputing it; skipping advances `NextRunAt` to the occurrence after the one currently scheduled and leaves everything else alone. These are dashboard/API-only (operator actions) — there's no `IAxonClient` equivalent, since it's normally an operator, not the job's own device, deciding to pause a schedule.
+
 ### 9. Open the dashboard
 
 Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password. The dashboard is organized into four tabs:

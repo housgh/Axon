@@ -27,4 +27,13 @@ public sealed class AxonAuditLog
 
     public static void RecurringJobTriggered(ILogger logger, string username, string recurringJobId, string jobId) =>
         logger.LogInformation("{Username} manually triggered recurring job {RecurringJobId} (new job {JobId})", username, recurringJobId, jobId);
+
+    public static void RecurringJobPaused(ILogger logger, string username, string recurringJobId) =>
+        logger.LogInformation("{Username} paused recurring job {RecurringJobId}", username, recurringJobId);
+
+    public static void RecurringJobResumed(ILogger logger, string username, string recurringJobId) =>
+        logger.LogInformation("{Username} resumed recurring job {RecurringJobId}", username, recurringJobId);
+
+    public static void RecurringJobNextSkipped(ILogger logger, string username, string recurringJobId) =>
+        logger.LogInformation("{Username} skipped the next occurrence of recurring job {RecurringJobId}", username, recurringJobId);
 }

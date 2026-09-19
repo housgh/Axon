@@ -115,10 +115,19 @@ BEGIN
         DeclaringType  NVARCHAR(512)  NOT NULL,
         CronExpression NVARCHAR(64)   NOT NULL,
         NextRunAt      BIGINT         NOT NULL,
-        LastRunAt      BIGINT         NULL
+        LastRunAt      BIGINT         NULL,
+        IsPaused       BIT            NOT NULL DEFAULT 0
     );
 
     CREATE INDEX IX_RecurringJobs_NextRunAt ON RecurringJobs (NextRunAt);
+END
+
+-- While paused, the poll loop skips this recurring job entirely (see
+-- AxonRecurringJobProcessor) - it never fires and NextRunAt is left untouched, so un-pausing
+-- resumes the existing schedule rather than recomputing it.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('RecurringJobs') AND name = 'IsPaused')
+BEGIN
+    ALTER TABLE RecurringJobs ADD IsPaused BIT NOT NULL DEFAULT 0;
 END
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ServerInstances')

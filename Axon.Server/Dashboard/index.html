@@ -1026,7 +1026,9 @@
   function renderRecurringRow(rj) {
     const tr = document.createElement('tr');
     tr.innerHTML =
-      '<td class="mono">' + escapeHtml(rj.recurringJobId) + '</td>' +
+      '<td class="mono">' + escapeHtml(rj.recurringJobId) +
+        (rj.isPaused ? ' <span class="badge awaiting-parent" style="margin-left:6px">Paused</span>' : '') +
+      '</td>' +
       '<td>' +
         '<div class="job-method">' + escapeHtml(rj.methodName) + '</div>' +
         '<div class="job-type">' + escapeHtml(shortType(rj.declaringType)) + '</div>' +
@@ -1034,7 +1036,7 @@
       '<td><span class="device-name" title="' + escapeHtml(rj.deviceName) + '">' + escapeHtml(shortDevice(rj.deviceName)) + '</span></td>' +
       '<td><span class="cron-code">' + escapeHtml(rj.cronExpression) + '</span></td>' +
       '<td>' + (rj.lastRunAt ? '<span title="' + fmtDate(rj.lastRunAt) + '">' + relativeTime(rj.lastRunAt) + '</span>' : '<span style="color:var(--text-faint)">never</span>') + '</td>' +
-      '<td><span title="' + fmtDate(rj.nextRunAt) + '">' + relativeTime(rj.nextRunAt) + '</span></td>' +
+      '<td>' + (rj.isPaused ? '<span style="color:var(--text-faint)">paused</span>' : '<span title="' + fmtDate(rj.nextRunAt) + '">' + relativeTime(rj.nextRunAt) + '</span>') + '</td>' +
       '<td><div class="row-actions"></div></td>';
 
     const actions = tr.querySelector('.row-actions');
@@ -1045,6 +1047,26 @@
       runBtn.textContent = '▶ Run now';
       runBtn.addEventListener('click', function () { triggerRecurring(rj.recurringJobId, runBtn); });
       actions.appendChild(runBtn);
+
+      if (rj.isPaused) {
+        const resumeBtn = document.createElement('button');
+        resumeBtn.title = 'Resume';
+        resumeBtn.textContent = '▶▶ Resume';
+        resumeBtn.addEventListener('click', function () { resumeRecurring(rj.recurringJobId, resumeBtn); });
+        actions.appendChild(resumeBtn);
+      } else {
+        const pauseBtn = document.createElement('button');
+        pauseBtn.title = 'Pause';
+        pauseBtn.textContent = '⏸ Pause';
+        pauseBtn.addEventListener('click', function () { pauseRecurring(rj.recurringJobId, pauseBtn); });
+        actions.appendChild(pauseBtn);
+
+        const skipBtn = document.createElement('button');
+        skipBtn.title = 'Skip next occurrence';
+        skipBtn.textContent = '⏭ Skip next';
+        skipBtn.addEventListener('click', function () { skipNextRecurring(rj.recurringJobId, skipBtn); });
+        actions.appendChild(skipBtn);
+      }
 
       const delBtn = document.createElement('button');
       delBtn.className = 'icon-btn danger-ghost';
@@ -1068,6 +1090,45 @@
       loadStats();
     } catch (e) {
       toast('Could not trigger job', 'error');
+    }
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+
+  async function pauseRecurring(id, btn) {
+    btn.disabled = true;
+    try {
+      await apiFetch('/axon/recurring-jobs/' + encodeURIComponent(id) + '/pause', { method: 'POST' });
+      toast('Recurring job paused', 'success');
+      loadRecurring();
+    } catch (e) {
+      toast('Could not pause recurring job', 'error');
+      btn.disabled = false;
+    }
+  }
+
+  async function resumeRecurring(id, btn) {
+    btn.disabled = true;
+    try {
+      await apiFetch('/axon/recurring-jobs/' + encodeURIComponent(id) + '/resume', { method: 'POST' });
+      toast('Recurring job resumed', 'success');
+      loadRecurring();
+    } catch (e) {
+      toast('Could not resume recurring job', 'error');
+      btn.disabled = false;
+    }
+  }
+
+  async function skipNextRecurring(id, btn) {
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Skipping…';
+    try {
+      await apiFetch('/axon/recurring-jobs/' + encodeURIComponent(id) + '/skip-next', { method: 'POST' });
+      toast('Next occurrence skipped', 'success');
+      loadRecurring();
+    } catch (e) {
+      toast('Could not skip next occurrence', 'error');
     }
     btn.disabled = false;
     btn.textContent = originalText;

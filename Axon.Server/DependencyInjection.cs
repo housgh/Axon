@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Axon.Core.Enums;
+using Axon.Core.Helpers;
 using Axon.Server.Hubs;
 using Axon.Server.Interfaces;
 using Axon.Server.Services;
@@ -356,7 +357,7 @@ public static class DependencyInjection
 
         if (apiEnabled)
         {
-            axon.MapGet("/jobs", async (IAxonJobStore jobStore, int skip, int take, JobState? state) =>
+            axon.MapGet("/jobs", async (IAxonJobStore jobStore, int skip = 0, int take = 0, JobState? state = null) =>
             {
                 var states = state is null ? null : new[] { state.Value };
                 var jobs = await jobStore.GetJobs(skip, take == 0 ? 20 : take, states);
@@ -391,7 +392,7 @@ public static class DependencyInjection
             axon.MapGet("/jobs/{jobId}/history", async (IAxonJobStore jobStore, string jobId) =>
                 Results.Ok(await jobStore.GetHistory(jobId)));
 
-            axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore, int skip, int take) =>
+            axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore, int skip = 0, int take = 0) =>
                 Results.Ok(await recurringJobStore.GetAll(skip, take == 0 ? 20 : take)));
 
             axon.MapGet("/servers", async (IAxonServerInstanceStore instanceStore) =>
@@ -453,12 +454,51 @@ public static class DependencyInjection
                 return Results.Ok(new { jobId });
             });
 
+            var pauseRecurring = axon.MapPost("/recurring-jobs/{recurringJobId}/pause", async (
+                HttpContext http, IAxonRecurringJobStore recurringJobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string recurringJobId) =>
+            {
+                if (await recurringJobStore.GetById(recurringJobId) is null) return Results.NotFound();
+
+                await recurringJobStore.SetPaused(recurringJobId, isPaused: true);
+                await notifier.RecurringJobsChanged();
+                AxonAuditLog.RecurringJobPaused(auditLogger, GetAuditUsername(http), recurringJobId);
+                return Results.NoContent();
+            });
+
+            var resumeRecurring = axon.MapPost("/recurring-jobs/{recurringJobId}/resume", async (
+                HttpContext http, IAxonRecurringJobStore recurringJobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string recurringJobId) =>
+            {
+                if (await recurringJobStore.GetById(recurringJobId) is null) return Results.NotFound();
+
+                await recurringJobStore.SetPaused(recurringJobId, isPaused: false);
+                await notifier.RecurringJobsChanged();
+                AxonAuditLog.RecurringJobResumed(auditLogger, GetAuditUsername(http), recurringJobId);
+                return Results.NoContent();
+            });
+
+            var skipNextRecurring = axon.MapPost("/recurring-jobs/{recurringJobId}/skip-next", async (
+                HttpContext http, IAxonRecurringJobStore recurringJobStore, IAxonDashboardNotifier notifier, ILogger<AxonAuditLog> auditLogger, string recurringJobId) =>
+            {
+                var recurringJob = await recurringJobStore.GetById(recurringJobId);
+                if (recurringJob is null) return Results.NotFound();
+
+                var cron = CronExpression.Parse(recurringJob.CronExpression);
+                var newNextRunAt = cron.GetNextOccurrence(new DateTimeOffset(recurringJob.NextRunAt, TimeSpan.Zero)).UtcTicks;
+                await recurringJobStore.SkipNext(recurringJobId, newNextRunAt);
+                await notifier.RecurringJobsChanged();
+                AxonAuditLog.RecurringJobNextSkipped(auditLogger, GetAuditUsername(http), recurringJobId);
+                return Results.NoContent();
+            });
+
             if (authEnabled)
             {
                 deleteJob.RequireAuthorization(WritePolicy);
                 retryJob.RequireAuthorization(WritePolicy);
                 deleteRecurring.RequireAuthorization(WritePolicy);
                 triggerRecurring.RequireAuthorization(WritePolicy);
+                pauseRecurring.RequireAuthorization(WritePolicy);
+                resumeRecurring.RequireAuthorization(WritePolicy);
+                skipNextRecurring.RequireAuthorization(WritePolicy);
             }
         }
 

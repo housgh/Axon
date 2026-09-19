@@ -22,4 +22,11 @@ public class RecurringJob : JobInfo
     public string CronExpression { get; set; } = null!;
     public long NextRunAt { get; set; }
     public long? LastRunAt { get; set; }
+
+    /// <summary>
+    /// While true, the poll loop skips this recurring job entirely - it never fires and
+    /// NextRunAt is left untouched, so resuming (setting this back to false) picks up the
+    /// existing schedule exactly where it would have been, rather than recomputing it.
+    /// </summary>
+    public bool IsPaused { get; set; }
 }

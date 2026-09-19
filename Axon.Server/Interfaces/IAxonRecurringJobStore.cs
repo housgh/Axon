@@ -20,4 +20,19 @@ public interface IAxonRecurringJobStore
 
     Task UpdateNextRun(string recurringJobId, long nextRunAt, long lastRunAt);
     Task Remove(string recurringJobId);
+
+    /// <summary>
+    /// Sets <see cref="RecurringJob.IsPaused"/>. A paused recurring job is skipped entirely by
+    /// the poll loop - it never fires while paused, and its <c>NextRunAt</c> is left untouched,
+    /// so un-pausing resumes the existing schedule rather than recomputing it. No-op if
+    /// <paramref name="recurringJobId"/> doesn't exist.
+    /// </summary>
+    Task SetPaused(string recurringJobId, bool isPaused);
+
+    /// <summary>
+    /// Advances <c>NextRunAt</c> to the occurrence after the one currently scheduled, skipping
+    /// only that single upcoming firing - the schedule continues normally after that. No-op if
+    /// <paramref name="recurringJobId"/> doesn't exist.
+    /// </summary>
+    Task SkipNext(string recurringJobId, long newNextRunAt);
 }

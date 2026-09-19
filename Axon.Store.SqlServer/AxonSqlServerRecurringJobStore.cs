@@ -19,6 +19,11 @@ public class AxonSqlServerRecurringJobStore(string connectionString) : IAxonRecu
     public Task AddOrUpdate(RecurringJob recurringJob) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
+        // IsPaused is deliberately absent from WHEN MATCHED: a client re-registering an existing
+        // recurring job (AddOrUpdateRecurringAsync is idempotent by id, and this runs on every
+        // client startup) has no isPaused concept of its own to declare - IsPaused is purely an
+        // operator-driven flag set via SetPaused (e.g. from the dashboard), so a client restart
+        // must not silently undo an operator's pause. New rows still default to unpaused.
         const string sql = @"
             MERGE RecurringJobs AS target
             USING (SELECT @RecurringJobId AS RecurringJobId) AS source
@@ -34,8 +39,8 @@ public class AxonSqlServerRecurringJobStore(string connectionString) : IAxonRecu
                     NextRunAt = @NextRunAt,
                     LastRunAt = @LastRunAt
             WHEN NOT MATCHED THEN
-                INSERT (RecurringJobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, CronExpression, NextRunAt, LastRunAt)
-                VALUES (@RecurringJobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @CronExpression, @NextRunAt, @LastRunAt);";
+                INSERT (RecurringJobId, DeviceName, Arguments, MethodName, Assembly, DeclaringType, CronExpression, NextRunAt, LastRunAt, IsPaused)
+                VALUES (@RecurringJobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @CronExpression, @NextRunAt, @LastRunAt, 0);";
         await conn.ExecuteAsync(sql, new
         {
             recurringJob.RecurringJobId,
@@ -82,5 +87,19 @@ public class AxonSqlServerRecurringJobStore(string connectionString) : IAxonRecu
         await using var conn = CreateConnection();
         const string sql = "DELETE FROM RecurringJobs WHERE RecurringJobId = @RecurringJobId";
         await conn.ExecuteAsync(sql, new { RecurringJobId = recurringJobId });
+    });
+
+    public Task SetPaused(string recurringJobId, bool isPaused) => SqlExceptionTranslator.Run(connectionString, async () =>
+    {
+        await using var conn = CreateConnection();
+        const string sql = "UPDATE RecurringJobs SET IsPaused = @IsPaused WHERE RecurringJobId = @RecurringJobId";
+        await conn.ExecuteAsync(sql, new { RecurringJobId = recurringJobId, IsPaused = isPaused });
+    });
+
+    public Task SkipNext(string recurringJobId, long newNextRunAt) => SqlExceptionTranslator.Run(connectionString, async () =>
+    {
+        await using var conn = CreateConnection();
+        const string sql = "UPDATE RecurringJobs SET NextRunAt = @NextRunAt WHERE RecurringJobId = @RecurringJobId";
+        await conn.ExecuteAsync(sql, new { RecurringJobId = recurringJobId, NextRunAt = newNextRunAt });
     });
 }
