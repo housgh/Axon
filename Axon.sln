@@ -31,6 +31,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Server.Redis", "Axon.S
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Server.OpenTelemetry", "Axon.Server.OpenTelemetry\Axon.Server.OpenTelemetry.csproj", "{083B69AB-DC2F-4EF2-8633-CDA9DA31C256}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{319AF0C7-09FA-45DC-BE48-C7E5496C7EB1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Example.Server", "examples\Axon.Example.Server\Axon.Example.Server.csproj", "{8F618709-F188-4E05-BB36-3F8F9A388664}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Example.Client", "examples\Axon.Example.Client\Axon.Example.Client.csproj", "{63DE5163-11C9-4FF5-A870-FFC22E53315E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -73,9 +79,19 @@ Global
 		{083B69AB-DC2F-4EF2-8633-CDA9DA31C256}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{083B69AB-DC2F-4EF2-8633-CDA9DA31C256}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{083B69AB-DC2F-4EF2-8633-CDA9DA31C256}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8F618709-F188-4E05-BB36-3F8F9A388664}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F618709-F188-4E05-BB36-3F8F9A388664}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F618709-F188-4E05-BB36-3F8F9A388664}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F618709-F188-4E05-BB36-3F8F9A388664}.Release|Any CPU.Build.0 = Release|Any CPU
+		{63DE5163-11C9-4FF5-A870-FFC22E53315E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{63DE5163-11C9-4FF5-A870-FFC22E53315E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{63DE5163-11C9-4FF5-A870-FFC22E53315E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{63DE5163-11C9-4FF5-A870-FFC22E53315E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{6824AFFA-1898-4FF9-A784-EA27B613BD28} = {7D34D4F5-61E1-465C-BA77-E01FF3948998}
 		{4105353D-7355-4071-ADAE-F3E1B910325C} = {7D34D4F5-61E1-465C-BA77-E01FF3948998}
+		{8F618709-F188-4E05-BB36-3F8F9A388664} = {319AF0C7-09FA-45DC-BE48-C7E5496C7EB1}
+		{63DE5163-11C9-4FF5-A870-FFC22E53315E} = {319AF0C7-09FA-45DC-BE48-C7E5496C7EB1}
 	EndGlobalSection
 EndGlobal

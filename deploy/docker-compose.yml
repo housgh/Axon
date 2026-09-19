@@ -1,0 +1,115 @@
+name: axon-multi-instance
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Ax0n!DemoPassw0rd"
+    ports:
+      - "1433:1433"
+    volumes:
+      - axon-sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server1:
+    build:
+      context: ..
+      dockerfile: examples/Axon.Example.Server/Dockerfile
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=Ax0n!DemoPassw0rd;TrustServerCertificate=True"
+      Axon__RedisConnectionString: "redis:6379"
+      Axon__InstanceName: "server1"
+      Axon__DataProtectionKeysPath: "/keys"
+    volumes:
+      - axon-dataprotection-keys:/keys
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+
+  server2:
+    build:
+      context: ..
+      dockerfile: examples/Axon.Example.Server/Dockerfile
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=Ax0n!DemoPassw0rd;TrustServerCertificate=True"
+      Axon__RedisConnectionString: "redis:6379"
+      Axon__InstanceName: "server2"
+      Axon__DataProtectionKeysPath: "/keys"
+    volumes:
+      - axon-dataprotection-keys:/keys
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8082:8080"
+
+  server3:
+    build:
+      context: ..
+      dockerfile: examples/Axon.Example.Server/Dockerfile
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      Axon__SqlConnectionString: "Server=sqlserver,1433;Database=Axon;User Id=sa;Password=Ax0n!DemoPassw0rd;TrustServerCertificate=True"
+      Axon__RedisConnectionString: "redis:6379"
+      Axon__InstanceName: "server3"
+      Axon__DataProtectionKeysPath: "/keys"
+    volumes:
+      - axon-dataprotection-keys:/keys
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8083:8080"
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      - server1
+      - server2
+      - server3
+
+  client:
+    build:
+      context: ..
+      dockerfile: examples/Axon.Example.Client/Dockerfile
+    environment:
+      ASPNETCORE_URLS: "http://+:8080"
+      Axon__ServerUrl: "http://nginx:8080"
+    depends_on:
+      - nginx
+    ports:
+      - "8090:8080"
+
+volumes:
+  axon-sqlserver-data:
+  axon-dataprotection-keys:

@@ -1,0 +1,66 @@
+# Multi-instance demo
+
+A docker compose stack demonstrating Axon running as a real horizontally-scaled deployment:
+**3 `Axon.Server` instances** behind an nginx load balancer, sharing **SQL Server** (job store)
+and **Redis** (SignalR backplane), with **1 `Axon.Client`** connecting through the load balancer.
+
+```
+                    ┌──────────┐
+   client ────────▶ │  nginx   │ (round-robin, no sticky sessions)
+                    └────┬─────┘
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+          server1     server2     server3
+              │          │          │
+              └────┬─────┴─────┬────┘
+                    ▼           ▼
+              SQL Server      Redis
+             (job store)   (backplane)
+```
+
+## Run it
+
+```bash
+cd deploy
+docker compose up -d --build
+```
+
+First boot takes a minute or two (SQL Server startup + each server's schema/database bootstrap).
+Then:
+
+- **Dashboard**: http://localhost:8080/axon (through the load balancer) — login `admin` / `P@ssw0rd`. Also reachable directly per-instance on 8081/8082/8083.
+- **Client**: http://localhost:8090/enqueue — enqueues one job; http://localhost:8090/enqueue-many/10 for a batch; http://localhost:8090/recurring to register a once-a-minute recurring job.
+- **SQL Server**: `localhost:1433`, sa / `Ax0n!DemoPassw0rd`.
+- **Redis**: `localhost:6379`.
+
+Tear down with `docker compose down` (add `-v` to also drop the SQL Server and Data Protection key volumes for a clean-slate rerun).
+
+## What this proves
+
+- **Dispatch correctness across instances**: enqueue a batch (`/enqueue-many/50`) and watch the client's logs — every job runs exactly once, regardless of which of the 3 servers' `AxonJobProcessor` won the atomic claim race against the shared SQL Server job store (see [docs/architecture.md#multi-instance-dispatch-safety](../docs/architecture.md#multi-instance-dispatch-safety)).
+- **Backplane routing**: the client's single WebSocket connection lands on exactly one server instance (check `/axon/clients` on each of 8081/8082/8083 directly - only one will list it). A job claimed and dispatched by a *different* instance still reaches the client, because `Axon.Server.Redis`'s backplane fans the SignalR call out across all 3 processes.
+- **No sticky sessions needed**: nginx here is a plain round-robin proxy (see `nginx.conf`) - deliberately not configured for session affinity, to demonstrate that the backplane is what makes that unnecessary for dispatch.
+
+## A real deployment lesson this setup surfaces
+
+Getting this working end-to-end surfaced something not obvious from a single-instance dev setup:
+**the dashboard's login cookie doesn't validate across instances by default.** ASP.NET Core signs
+and encrypts auth cookies with its Data Protection key ring, which is per-process and ephemeral
+unless configured otherwise - so a cookie issued by `server1` fails with `401` against `server2`
+or `server3`, even though `DashboardUsers` and the cookie scheme are identical everywhere. This
+has nothing to do with Axon's own auth logic; it's a general ASP.NET Core behind-a-load-balancer
+concern that any cookie-authenticated app hits.
+
+The fix here (`Program.cs` + the `axon-dataprotection-keys` volume in `docker-compose.yml`):
+point every instance's Data Protection key ring at the same shared location via
+`PersistKeysToFileSystem`. In this demo that's a shared Docker volume; in a real deployment it'd
+more likely be a shared network file share or a dedicated key-ring store (Azure Blob, Redis, etc.
+via the corresponding Data Protection extension packages). Verified by logging in against one
+instance directly and confirming the same cookie is then accepted by the other two.
+
+## Files
+
+- `docker-compose.yml` — the stack.
+- `nginx.conf` — round-robin proxy with WebSocket upgrade support (required for SignalR).
+- `../examples/Axon.Example.Server/` — minimal server-only host (SQL storage + Redis backplane + dashboard auth + job cleanup, all opted into).
+- `../examples/Axon.Example.Client/` — minimal client-only host with a few HTTP endpoints to trigger jobs.

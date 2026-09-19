@@ -260,6 +260,8 @@ The dashboard updates in real time over a dedicated SignalR connection (`/axon/h
 
 See [Axon.Example](Axon.Example) for a complete, runnable ASP.NET Core project wired up end-to-end (server + client in the same process).
 
+For a real horizontally-scaled deployment - 3 `Axon.Server` instances behind a load balancer, sharing SQL Server and a Redis backplane, with a separate client - see [deploy/](deploy) for a docker compose stack that runs the whole thing with one command.
+
 ## Architecture
 
 See [docs/architecture.md](docs/architecture.md) for diagrams of the job dispatch flow, state machine, and crash/restart recovery.
