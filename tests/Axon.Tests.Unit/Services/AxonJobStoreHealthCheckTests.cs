@@ -29,5 +29,6 @@ public class AxonJobStoreHealthCheckTests
 
         result.Status.Should().Be(HealthStatus.Unhealthy);
         result.Exception.Should().BeOfType<InvalidOperationException>();
+        result.Description.Should().Be("connection refused");
     }
 }

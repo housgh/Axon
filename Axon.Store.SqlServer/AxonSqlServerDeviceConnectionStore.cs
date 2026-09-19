@@ -23,7 +23,7 @@ public class AxonSqlServerDeviceConnectionStore(string connectionString) : IDevi
     private SqlConnection CreateConnection() =>
         new(connectionString);
 
-    public async Task Register(string deviceName, string connectionId)
+    public Task Register(string deviceName, string connectionId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
@@ -45,16 +45,16 @@ public class AxonSqlServerDeviceConnectionStore(string connectionString) : IDevi
             InstanceId = AxonServerInstanceHeartbeat.InstanceId,
             ConnectedAt = DateTime.UtcNow.Ticks
         });
-    }
+    });
 
-    public async Task Unregister(string connectionId)
+    public Task Unregister(string connectionId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "DELETE FROM DeviceConnections WHERE ConnectionId = @ConnectionId";
         await conn.ExecuteAsync(sql, new { ConnectionId = connectionId });
-    }
+    });
 
-    public async Task<string?> GetConnectionId(string deviceName)
+    public Task<string?> GetConnectionId(string deviceName) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
@@ -66,16 +66,16 @@ public class AxonSqlServerDeviceConnectionStore(string connectionString) : IDevi
             DeviceName = deviceName,
             Cutoff = DateTime.UtcNow.Ticks - OfflineTimeoutTicks
         });
-    }
+    });
 
-    public async Task<string?> GetDeviceName(string connectionId)
+    public Task<string?> GetDeviceName(string connectionId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "SELECT DeviceName FROM DeviceConnections WHERE ConnectionId = @ConnectionId";
         return await conn.QueryFirstOrDefaultAsync<string>(sql, new { ConnectionId = connectionId });
-    }
+    });
 
-    public async Task<List<ConnectedDevice>> GetAll()
+    public Task<List<ConnectedDevice>> GetAll() => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
@@ -87,5 +87,5 @@ public class AxonSqlServerDeviceConnectionStore(string connectionString) : IDevi
         {
             Cutoff = DateTime.UtcNow.Ticks - OfflineTimeoutTicks
         })).ToList();
-    }
+    });
 }

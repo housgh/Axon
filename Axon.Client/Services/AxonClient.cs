@@ -8,11 +8,33 @@ namespace Axon.Client.Services;
 
 public interface IAxonClient
 {
+    /// <summary>
+    /// Enqueues <paramref name="methodCall"/> to run as soon as a connected device with a
+    /// matching device name picks it up (see <see cref="ScheduleAsync(TimeSpan,Expression{Action},AxonRetryPolicy?,string?,int?)"/>
+    /// to instead delay dispatch). Returns the new job's id once the server has durably stored
+    /// it - awaiting this does not wait for the job to actually run.
+    /// <para/>
+    /// <paramref name="retryPolicy"/> overrides Axon.Server's default retry/backoff schedule for
+    /// this job only; <paramref name="concurrencyKey"/> plus <paramref name="maxConcurrent"/>
+    /// cap how many jobs sharing that key may be Processing at once across the whole fleet
+    /// (enforced atomically by the job store, not just locally).
+    /// </summary>
     Task<string> EnqueueAsync(Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    /// <inheritdoc cref="EnqueueAsync(Expression{Action},AxonRetryPolicy?,string?,int?)"/>
     Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    /// <summary>
+    /// Like <see cref="EnqueueAsync(Expression{Action},AxonRetryPolicy?,string?,int?)"/>, but the
+    /// job only becomes eligible for dispatch after <paramref name="delay"/> has elapsed.
+    /// </summary>
     Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    /// <inheritdoc cref="ScheduleAsync(TimeSpan,Expression{Action},AxonRetryPolicy?,string?,int?)"/>
     Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    /// <summary>
+    /// Like <see cref="EnqueueAsync(Expression{Action},AxonRetryPolicy?,string?,int?)"/>, but the
+    /// job only becomes eligible for dispatch at <paramref name="scheduledFor"/>.
+    /// </summary>
     Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
+    /// <inheritdoc cref="ScheduleAsync(DateTimeOffset,Expression{Action},AxonRetryPolicy?,string?,int?)"/>
     Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonRetryPolicy? retryPolicy = null, string? concurrencyKey = null, int? maxConcurrent = null);
 
     /// <summary>

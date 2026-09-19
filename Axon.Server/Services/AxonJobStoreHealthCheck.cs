@@ -21,7 +21,10 @@ public class AxonJobStoreHealthCheck(IAxonJobStore jobStore) : IHealthCheck
         }
         catch (Exception e)
         {
-            return HealthCheckResult.Unhealthy("Job store is unreachable.", e);
+            // AxonStoreException's own message is already actionable (e.g. "Could not reach SQL
+            // Server at ..." or "...run Schema.sql...") - surface it directly instead of the
+            // generic fallback, so this shows up verbatim in health check output/logs.
+            return HealthCheckResult.Unhealthy(e.Message, e);
         }
     }
 }

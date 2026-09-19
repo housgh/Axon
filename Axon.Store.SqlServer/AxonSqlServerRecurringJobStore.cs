@@ -16,7 +16,7 @@ public class AxonSqlServerRecurringJobStore(string connectionString) : IAxonRecu
     private SqlConnection CreateConnection() =>
         new(connectionString);
 
-    public async Task AddOrUpdate(RecurringJob recurringJob)
+    public Task AddOrUpdate(RecurringJob recurringJob) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
@@ -48,16 +48,16 @@ public class AxonSqlServerRecurringJobStore(string connectionString) : IAxonRecu
             recurringJob.NextRunAt,
             recurringJob.LastRunAt
         });
-    }
+    });
 
-    public async Task<List<RecurringJob>> GetAll()
+    public Task<List<RecurringJob>> GetAll() => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "SELECT * FROM RecurringJobs ORDER BY NextRunAt";
         return (await conn.QueryAsync<RecurringJob>(sql)).ToList();
-    }
+    });
 
-    public async Task UpdateNextRun(string recurringJobId, long nextRunAt, long lastRunAt)
+    public Task UpdateNextRun(string recurringJobId, long nextRunAt, long lastRunAt) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
@@ -65,12 +65,12 @@ public class AxonSqlServerRecurringJobStore(string connectionString) : IAxonRecu
             SET NextRunAt = @NextRunAt, LastRunAt = @LastRunAt
             WHERE RecurringJobId = @RecurringJobId";
         await conn.ExecuteAsync(sql, new { RecurringJobId = recurringJobId, NextRunAt = nextRunAt, LastRunAt = lastRunAt });
-    }
+    });
 
-    public async Task Remove(string recurringJobId)
+    public Task Remove(string recurringJobId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "DELETE FROM RecurringJobs WHERE RecurringJobId = @RecurringJobId";
         await conn.ExecuteAsync(sql, new { RecurringJobId = recurringJobId });
-    }
+    });
 }

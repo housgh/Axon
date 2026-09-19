@@ -11,7 +11,7 @@ public class AxonSqlServerInstanceStore(string connectionString) : IAxonServerIn
     private SqlConnection CreateConnection() =>
         new(connectionString);
 
-    public async Task Heartbeat(ServerInstance instance)
+    public Task Heartbeat(ServerInstance instance) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
@@ -30,19 +30,19 @@ public class AxonSqlServerInstanceStore(string connectionString) : IAxonServerIn
             instance.StartedAt,
             instance.LastSeenAt
         });
-    }
+    });
 
-    public async Task<List<ServerInstance>> GetAll()
+    public Task<List<ServerInstance>> GetAll() => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "SELECT * FROM ServerInstances ORDER BY LastSeenAt DESC";
         return (await conn.QueryAsync<ServerInstance>(sql)).ToList();
-    }
+    });
 
-    public async Task Remove(string instanceId)
+    public Task Remove(string instanceId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "DELETE FROM ServerInstances WHERE InstanceId = @InstanceId";
         await conn.ExecuteAsync(sql, new { InstanceId = instanceId });
-    }
+    });
 }

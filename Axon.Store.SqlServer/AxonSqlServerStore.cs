@@ -33,7 +33,7 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         }, tx);
     }
 
-    public async Task AddJob(Job job)
+    public Task AddJob(Job job) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
@@ -66,16 +66,16 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         await AppendHistory(conn, tx, job.JobId, job.State, null);
 
         await tx.CommitAsync();
-    }
+    });
 
-    public async Task<Job?> GetJob(string id)
+    public Task<Job?> GetJob(string id) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "SELECT * FROM Jobs WHERE JobId = @Id AND IsDeleted = 0";
         return await conn.QueryFirstOrDefaultAsync<Job>(sql, new { Id = id });
-    }
+    });
 
-    public async Task<List<Job>> GetJobs(int skip = 0, int take = 20, JobState[]? states = null)
+    public Task<List<Job>> GetJobs(int skip = 0, int take = 20, JobState[]? states = null) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
 
@@ -102,9 +102,9 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
                 OFFSET @Skip ROWS FETCH NEXT @Take ROWS ONLY";
             return (await conn.QueryAsync<Job>(sql, new { Skip = skip, Take = take })).ToList();
         }
-    }
+    });
 
-    public async Task UpdateState(string id, JobState state, string? note = null)
+    public Task UpdateState(string id, JobState state, string? note = null) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
@@ -115,9 +115,9 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         await AppendHistory(conn, tx, id, state, note);
 
         await tx.CommitAsync();
-    }
+    });
 
-    public async Task RequeueForRetry(string id, long scheduledFor, string? note = null)
+    public Task RequeueForRetry(string id, long scheduledFor, string? note = null) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
@@ -131,9 +131,9 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         await AppendHistory(conn, tx, id, JobState.Scheduled, note);
 
         await tx.CommitAsync();
-    }
+    });
 
-    public async Task Requeue(string id, string note = "Requeued manually")
+    public Task Requeue(string id, string note = "Requeued manually") => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
@@ -147,16 +147,16 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         await AppendHistory(conn, tx, id, JobState.Enqueued, note);
 
         await tx.CommitAsync();
-    }
+    });
 
-    public async Task DeleteJob(string id)
+    public Task DeleteJob(string id) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "UPDATE Jobs SET IsDeleted = 1 WHERE JobId = @Id";
         await conn.ExecuteAsync(sql, new { Id = id });
-    }
+    });
 
-    public async Task RecordFailure(string id, string? error)
+    public Task RecordFailure(string id, string? error) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
@@ -165,21 +165,23 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         await AppendHistory(conn, tx, id, JobState.Failed, error);
 
         await tx.CommitAsync();
-    }
+    });
 
-    public async Task<List<JobHistoryEntry>> GetHistory(string jobId)
+    public Task<List<JobHistoryEntry>> GetHistory(string jobId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = "SELECT * FROM JobHistory WHERE JobId = @JobId ORDER BY Timestamp";
         return (await conn.QueryAsync<JobHistoryEntry>(sql, new { JobId = jobId })).ToList();
-    }
+    });
 
-    public async Task<bool> TryClaimJob(string id, long processingDeadline, string? note = null)
+    public Task<bool> TryClaimJob(string id, long processingDeadline, string? note = null) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         // The count-then-update in TryClaimJobCore takes UPDLOCK/HOLDLOCK on overlapping key
         // ranges (all rows sharing a ConcurrencyKey), so concurrent claims against the same key
         // can legitimately deadlock (SQL error 1205) rather than just block - retrying the loser
         // is the standard mitigation, same as any lock-escalating conditional-update pattern.
+        // This inner catch (filtered to error 1205) runs before SqlExceptionTranslator sees
+        // anything, so a deadlock retry never gets misreported as a connectivity/schema failure.
         const int maxAttempts = 5;
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -195,7 +197,7 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
 
         // Unreachable: the loop either returns or the final attempt's exception propagates.
         throw new InvalidOperationException("TryClaimJob retry loop exited without returning or throwing.");
-    }
+    });
 
     private async Task<bool> TryClaimJobCore(string id, long processingDeadline, string? note)
     {
@@ -248,34 +250,34 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
         return true;
     }
 
-    public async Task<List<Job>> GetOrphanedProcessingJobs(long asOf)
+    public Task<List<Job>> GetOrphanedProcessingJobs(long asOf) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
             SELECT * FROM Jobs
             WHERE IsDeleted = 0 AND State = @State AND ProcessingDeadline IS NOT NULL AND ProcessingDeadline < @AsOf";
         return (await conn.QueryAsync<Job>(sql, new { State = (int)JobState.Processing, AsOf = asOf })).ToList();
-    }
+    });
 
-    public async Task<List<Job>> GetProcessingJobsForDevice(string deviceName)
+    public Task<List<Job>> GetProcessingJobsForDevice(string deviceName) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
             SELECT * FROM Jobs
             WHERE IsDeleted = 0 AND State = @State AND DeviceName = @DeviceName";
         return (await conn.QueryAsync<Job>(sql, new { State = (int)JobState.Processing, DeviceName = deviceName })).ToList();
-    }
+    });
 
-    public async Task<List<Job>> GetContinuationsWaitingOn(string parentJobId)
+    public Task<List<Job>> GetContinuationsWaitingOn(string parentJobId) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         const string sql = @"
             SELECT * FROM Jobs
             WHERE IsDeleted = 0 AND State = @State AND ParentJobId = @ParentJobId";
         return (await conn.QueryAsync<Job>(sql, new { State = (int)JobState.AwaitingParent, ParentJobId = parentJobId })).ToList();
-    }
+    });
 
-    public async Task<int> DeleteCompletedJobsOlderThan(long cutoff)
+    public Task<int> DeleteCompletedJobsOlderThan(long cutoff) => SqlExceptionTranslator.Run(connectionString, async () =>
     {
         await using var conn = CreateConnection();
         await conn.OpenAsync();
@@ -313,5 +315,5 @@ public class AxonSqlServerStore(string connectionString) : IAxonJobStore
 
         await tx.CommitAsync();
         return jobIds.Count;
-    }
+    });
 }
