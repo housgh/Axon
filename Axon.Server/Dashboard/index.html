@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Axon Dashboard</title>
+<link rel="icon" href="/axon/favicon.ico" />
+<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.7/dist/browser/signalr.min.js"></script>
 <style>
   :root {
     color-scheme: light dark;
@@ -256,6 +258,42 @@
     margin-bottom: 20px;
     overflow: hidden;
   }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .tab {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 550;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 9px 4px;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab .count {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--surface-2);
+    padding: 1px 7px;
+    border-radius: 100px;
+  }
+  .tab.active .count { color: var(--accent); background: var(--accent-soft); }
+  .tab-panel[hidden] { display: none; }
 
   .panel-head {
     display: flex;
@@ -513,80 +551,144 @@
 
   <div class="stats" id="statCards"></div>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Jobs <span class="count" id="jobsCount">0</span></h2>
-      <div class="filters">
-        <select id="stateFilter">
-          <option value="">All states</option>
-          <option value="0">Enqueued</option>
-          <option value="1">Scheduled</option>
-          <option value="2">Processing</option>
-          <option value="3">Succeeded</option>
-          <option value="4">Failed</option>
-        </select>
-        <select id="pageSize">
-          <option value="10">10 / page</option>
-          <option value="20" selected>20 / page</option>
-          <option value="50">50 / page</option>
-        </select>
-      </div>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Job</th>
-            <th>Device</th>
-            <th>State</th>
-            <th>Attempts</th>
-            <th>Scheduled for</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="jobsBody"></tbody>
-      </table>
-    </div>
-    <div id="jobsEmpty" class="empty" hidden>
-      <div class="big">📭</div>
-      <div>No jobs match this filter</div>
-      <div class="hint">Jobs enqueued from any Axon client will show up here.</div>
-    </div>
-    <div class="panel-foot">
-      <span id="pageInfo">—</span>
-      <div class="pager">
-        <button id="prevPage">← Prev</button>
-        <button id="nextPage">Next →</button>
-      </div>
-    </div>
-  </section>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="jobs" role="tab" aria-selected="true">Jobs <span class="count" id="jobsTabCount">0</span></button>
+    <button class="tab" data-tab="recurring" role="tab" aria-selected="false">Recurring jobs <span class="count" id="recurringTabCount">0</span></button>
+    <button class="tab" data-tab="servers" role="tab" aria-selected="false">Servers <span class="count" id="serversTabCount">0</span></button>
+    <button class="tab" data-tab="clients" role="tab" aria-selected="false">Clients <span class="count" id="clientsTabCount">0</span></button>
+  </nav>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Recurring jobs <span class="count" id="recurringCount">0</span></h2>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>Id</th>
-            <th>Method</th>
-            <th>Device</th>
-            <th>Cron</th>
-            <th>Last run</th>
-            <th>Next run</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="recurringBody"></tbody>
-      </table>
-    </div>
-    <div id="recurringEmpty" class="empty" hidden>
-      <div class="big">🕒</div>
-      <div>No recurring jobs configured</div>
-      <div class="hint">Register one with <code class="inline">AddOrUpdateRecurringAsync</code>.</div>
-    </div>
-  </section>
+  <div class="tab-panel" id="tab-jobs">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Jobs <span class="count" id="jobsCount">0</span></h2>
+        <div class="filters">
+          <select id="stateFilter">
+            <option value="">All states</option>
+            <option value="0">Enqueued</option>
+            <option value="1">Scheduled</option>
+            <option value="2">Processing</option>
+            <option value="3">Succeeded</option>
+            <option value="4">Failed</option>
+          </select>
+          <select id="pageSize">
+            <option value="10">10 / page</option>
+            <option value="20" selected>20 / page</option>
+            <option value="50">50 / page</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th>Device</th>
+              <th>State</th>
+              <th>Attempts</th>
+              <th>Scheduled for</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="jobsBody"></tbody>
+        </table>
+      </div>
+      <div id="jobsEmpty" class="empty" hidden>
+        <div class="big">📭</div>
+        <div>No jobs match this filter</div>
+        <div class="hint">Jobs enqueued from any Axon client will show up here.</div>
+      </div>
+      <div class="panel-foot">
+        <span id="pageInfo">—</span>
+        <div class="pager">
+          <button id="prevPage">← Prev</button>
+          <button id="nextPage">Next →</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-panel" id="tab-recurring" hidden>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Recurring jobs <span class="count" id="recurringCount">0</span></h2>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Id</th>
+              <th>Method</th>
+              <th>Device</th>
+              <th>Cron</th>
+              <th>Last run</th>
+              <th>Next run</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="recurringBody"></tbody>
+        </table>
+      </div>
+      <div id="recurringEmpty" class="empty" hidden>
+        <div class="big">🕒</div>
+        <div>No recurring jobs configured</div>
+        <div class="hint">Register one with <code class="inline">AddOrUpdateRecurringAsync</code>.</div>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-panel" id="tab-servers" hidden>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Servers <span class="count" id="serversCount">0</span></h2>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Machine</th>
+              <th>Instance</th>
+              <th>Started</th>
+              <th>Last seen</th>
+            </tr>
+          </thead>
+          <tbody id="serversBody"></tbody>
+        </table>
+      </div>
+      <div id="serversEmpty" class="empty" hidden>
+        <div class="big">🖥</div>
+        <div>No server instances reporting</div>
+        <div class="hint">Requires <code class="inline">AddAxonSqlServerStore</code> for cross-instance visibility; a single in-memory instance shows only itself.</div>
+      </div>
+    </section>
+  </div>
+
+  <div class="tab-panel" id="tab-clients" hidden>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Clients <span class="count" id="clientsCount">0</span></h2>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Device</th>
+              <th>Connection</th>
+              <th>Connected</th>
+            </tr>
+          </thead>
+          <tbody id="clientsBody"></tbody>
+        </table>
+      </div>
+      <div id="clientsEmpty" class="empty" hidden>
+        <div class="big">🔌</div>
+        <div>No clients connected</div>
+        <div class="hint">Only clients connected to this server instance are shown; in a multi-instance deployment, other instances have their own connected clients.</div>
+      </div>
+    </section>
+  </div>
 </div>
 
 <div class="toast-stack" id="toastStack"></div>
@@ -618,6 +720,32 @@
     });
   });
 
+  const TAB_KEY = 'axon-dashboard-tab';
+  const TAB_NAMES = ['jobs', 'recurring', 'servers', 'clients'];
+
+  function applyTab(name) {
+    if (TAB_NAMES.indexOf(name) === -1) name = 'jobs';
+    document.querySelectorAll('.tab').forEach(function (btn) {
+      const active = btn.getAttribute('data-tab') === name;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    TAB_NAMES.forEach(function (n) {
+      document.getElementById('tab-' + n).hidden = n !== name;
+    });
+    try { localStorage.setItem(TAB_KEY, name); } catch (e) {}
+  }
+
+  let storedTab = 'jobs';
+  try { storedTab = localStorage.getItem(TAB_KEY) || 'jobs'; } catch (e) {}
+  applyTab(storedTab);
+
+  document.querySelectorAll('.tab').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyTab(btn.getAttribute('data-tab'));
+    });
+  });
+
   const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed'];
   const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed'];
   let isReadOnly = false;
@@ -633,9 +761,19 @@
   const jobsBody = document.getElementById('jobsBody');
   const jobsEmpty = document.getElementById('jobsEmpty');
   const jobsCount = document.getElementById('jobsCount');
+  const jobsTabCount = document.getElementById('jobsTabCount');
   const recurringBody = document.getElementById('recurringBody');
   const recurringEmpty = document.getElementById('recurringEmpty');
   const recurringCount = document.getElementById('recurringCount');
+  const recurringTabCount = document.getElementById('recurringTabCount');
+  const serversBody = document.getElementById('serversBody');
+  const serversEmpty = document.getElementById('serversEmpty');
+  const serversCount = document.getElementById('serversCount');
+  const serversTabCount = document.getElementById('serversTabCount');
+  const clientsBody = document.getElementById('clientsBody');
+  const clientsEmpty = document.getElementById('clientsEmpty');
+  const clientsCount = document.getElementById('clientsCount');
+  const clientsTabCount = document.getElementById('clientsTabCount');
   const pageInfo = document.getElementById('pageInfo');
   const statCards = document.getElementById('statCards');
   const liveDot = document.getElementById('liveDot');
@@ -661,6 +799,7 @@
       document.getElementById('stateFilter').value = state.stateFilter;
       state.skip = 0;
       highlightActiveStat();
+      applyTab('jobs');
       loadJobs();
     });
     statCards.appendChild(card);
@@ -855,6 +994,7 @@
       const res = await apiFetch('/axon/jobs?' + params.toString());
       const jobs = await res.json();
       jobsCount.textContent = jobs.length + (jobs.length === state.pageSize ? '+' : '');
+      jobsTabCount.textContent = jobsCount.textContent;
       jobsBody.innerHTML = '';
       jobsEmpty.hidden = jobs.length > 0;
 
@@ -954,6 +1094,7 @@
       const res = await apiFetch('/axon/recurring-jobs');
       const jobs = await res.json();
       recurringCount.textContent = jobs.length;
+      recurringTabCount.textContent = jobs.length;
       recurringBody.innerHTML = '';
       recurringEmpty.hidden = jobs.length > 0;
       jobs.forEach(function (rj) { recurringBody.appendChild(renderRecurringRow(rj)); });
@@ -963,10 +1104,61 @@
     }
   }
 
+  function renderServerRow(server) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><span class="badge ' + (server.isOnline ? 'succeeded' : 'failed') + '">' + (server.isOnline ? 'Online' : 'Offline') + '</span></td>' +
+      '<td>' + escapeHtml(server.machineName) + '</td>' +
+      '<td class="mono" title="' + escapeHtml(server.instanceId) + '">' + escapeHtml(server.instanceId.slice(0, 8)) + '</td>' +
+      '<td><span title="' + fmtDate(server.startedAt) + '">' + relativeTime(server.startedAt) + '</span></td>' +
+      '<td><span title="' + fmtDate(server.lastSeenAt) + '">' + relativeTime(server.lastSeenAt) + '</span></td>';
+    return tr;
+  }
+
+  async function loadServers() {
+    try {
+      const res = await apiFetch('/axon/servers');
+      const servers = await res.json();
+      serversCount.textContent = servers.length;
+      serversTabCount.textContent = servers.length;
+      serversBody.innerHTML = '';
+      serversEmpty.hidden = servers.length > 0;
+      servers.forEach(function (s) { serversBody.appendChild(renderServerRow(s)); });
+    } catch (e) {
+      // Servers panel failing shouldn't flip the overall live indicator - jobs/recurring already do that.
+    }
+  }
+
+  function renderClientRow(client) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><span class="badge ' + (client.isProcessing ? 'processing' : 'scheduled') + '">' + (client.isProcessing ? 'Processing' : 'Idle') + '</span></td>' +
+      '<td><span class="device-name" title="' + escapeHtml(client.deviceName) + '">' + escapeHtml(shortDevice(client.deviceName)) + '</span></td>' +
+      '<td class="mono" title="' + escapeHtml(client.connectionId) + '">' + escapeHtml(client.connectionId.slice(0, 8)) + '</td>' +
+      '<td><span title="' + fmtDate(client.connectedAt) + '">' + relativeTime(client.connectedAt) + '</span></td>';
+    return tr;
+  }
+
+  async function loadClients() {
+    try {
+      const res = await apiFetch('/axon/clients');
+      const clients = await res.json();
+      clientsCount.textContent = clients.length;
+      clientsTabCount.textContent = clients.length;
+      clientsBody.innerHTML = '';
+      clientsEmpty.hidden = clients.length > 0;
+      clients.forEach(function (c) { clientsBody.appendChild(renderClientRow(c)); });
+    } catch (e) {
+      // Clients panel failing shouldn't flip the overall live indicator - jobs/recurring already do that.
+    }
+  }
+
   function loadAll() {
     loadStats();
     loadJobs();
     loadRecurring();
+    loadServers();
+    loadClients();
   }
 
   document.getElementById('stateFilter').addEventListener('change', function (e) {
@@ -1054,13 +1246,69 @@
     pendingRemoveRecurringId = null;
   });
 
+  // Real-time updates via SignalR when available; falls back to polling (below) whenever the
+  // hub connection isn't currently up, so the dashboard stays live either way.
+  var pollTimer = null;
+  var hubConnection = null;
+
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(loadAll, 5000);
+  }
+
+  function stopPolling() {
+    if (!pollTimer) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+
+  function connectDashboardHub() {
+    if (typeof signalR === 'undefined') {
+      // SignalR script failed to load (e.g. no network path to the CDN) - polling only.
+      startPolling();
+      return;
+    }
+
+    hubConnection = new signalR.HubConnectionBuilder()
+      .withUrl('/axon/hub')
+      .withAutomaticReconnect()
+      .build();
+
+    hubConnection.on('JobsChanged', loadJobs);
+    hubConnection.on('JobsChanged', loadStats);
+    hubConnection.on('RecurringJobsChanged', loadRecurring);
+    hubConnection.on('ServersChanged', loadServers);
+    hubConnection.on('ClientsChanged', loadClients);
+
+    hubConnection.onreconnecting(function () {
+      setLive(false);
+      startPolling();
+    });
+    hubConnection.onreconnected(function () {
+      setLive(true);
+      stopPolling();
+      loadAll();
+    });
+    hubConnection.onclose(function () {
+      setLive(false);
+      startPolling();
+    });
+
+    hubConnection.start().then(function () {
+      setLive(true);
+      stopPolling();
+    }).catch(function () {
+      startPolling();
+    });
+  }
+
   apiFetch('/axon/me').then(function (r) { return r.json(); }).then(function (me) {
     isReadOnly = me.role !== 'Admin';
     const userLabel = document.getElementById('currentUser');
     if (userLabel) userLabel.textContent = me.username + (isReadOnly ? ' (read-only)' : '');
   }).catch(function () {}).then(function () {
     loadAll();
-    setInterval(loadAll, 5000);
+    connectDashboardHub();
   });
 })();
 </script>

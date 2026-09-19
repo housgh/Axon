@@ -24,9 +24,15 @@ public static class DependencyInjection
     private const string AuthScheme = "AxonDashboard";
     private const string AuthPolicy = "AxonDashboardAuth";
     private const string WritePolicy = "AxonDashboardWrite";
+
+    // An instance is considered offline once its heartbeat (every 15s, see
+    // AxonServerInstanceHeartbeat) is older than this - generous enough to absorb a couple of
+    // missed/delayed heartbeats without flapping.
+    private static readonly TimeSpan ServerInstanceOfflineTimeout = TimeSpan.FromSeconds(45);
     private static string? _dashboardHtml;
     private static string? _loginHtml;
     private static string? _jobHtml;
+    private static byte[]? _faviconBytes;
 
     private static string GetEmbeddedResource(string suffix)
     {
@@ -39,9 +45,22 @@ public static class DependencyInjection
         return reader.ReadToEnd();
     }
 
+    private static byte[] GetEmbeddedResourceBytes(string suffix)
+    {
+        var assembly = typeof(DependencyInjection).Assembly;
+        var resourceName = assembly.GetManifestResourceNames()
+            .Single(n => n.EndsWith(suffix, StringComparison.Ordinal));
+
+        using var stream = assembly.GetManifestResourceStream(resourceName)!;
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+
     private static string GetDashboardHtml() => _dashboardHtml ??= GetEmbeddedResource("Dashboard.index.html");
     private static string GetLoginHtml() => _loginHtml ??= GetEmbeddedResource("Dashboard.login.html");
     private static string GetJobHtml() => _jobHtml ??= GetEmbeddedResource("Dashboard.job.html");
+    private static byte[] GetFaviconBytes() => _faviconBytes ??= GetEmbeddedResourceBytes("Dashboard.axon.ico");
 
     private static bool PasswordsMatch(string a, string b)
     {
@@ -57,11 +76,14 @@ public static class DependencyInjection
         services.AddSignalR();
         services.TryAddSingleton<IAxonJobStore, InMemoryAxonJobStore>();
         services.TryAddSingleton<IAxonRecurringJobStore, InMemoryAxonRecurringJobStore>();
+        services.TryAddSingleton<IAxonServerInstanceStore, InMemoryAxonServerInstanceStore>();
         services.AddSingleton<IDeviceConnectionRegistry, DeviceConnectionRegistry>();
+        services.AddSingleton<IAxonDashboardNotifier, AxonDashboardNotifier>();
         services.AddSingleton<IAxonJobService, AxonJobService>();
         services.AddScoped<IAxonRecurringJobService, AxonRecurringJobService>();
         services.AddHostedService<AxonJobProcessor>();
         services.AddHostedService<AxonRecurringJobProcessor>();
+        services.AddHostedService<AxonServerInstanceHeartbeat>();
 
         return new AxonServerBuilder(services);
     }
@@ -193,9 +215,17 @@ public static class DependencyInjection
                 axon.MapGet("/", () => Results.Redirect("/axon/dashboard")).AllowAnonymous();
             }
 
+            axon.MapGet("/favicon.ico", () => Results.Bytes(GetFaviconBytes(), "image/x-icon")).AllowAnonymous();
+
             axon.MapGet("/dashboard", () => Results.Content(GetDashboardHtml(), "text/html"));
 
             axon.MapGet("/jobs/{jobId}/view", () => Results.Content(GetJobHtml(), "text/html"));
+
+            var dashboardHub = app.MapHub<AxonDashboardHub>("/axon/hub");
+            if (authEnabled)
+            {
+                dashboardHub.RequireAuthorization(AuthPolicy);
+            }
         }
 
         if (authEnabled)
@@ -264,18 +294,20 @@ public static class DependencyInjection
                 return job is null ? Results.NotFound() : Results.Ok(job);
             });
 
-            var deleteJob = axon.MapDelete("/jobs/{jobId}", async (IAxonJobStore jobStore, string jobId) =>
+            var deleteJob = axon.MapDelete("/jobs/{jobId}", async (IAxonJobStore jobStore, IAxonDashboardNotifier notifier, string jobId) =>
             {
                 await jobStore.DeleteJob(jobId);
+                await notifier.JobsChanged();
                 return Results.NoContent();
             });
 
-            var retryJob = axon.MapPost("/jobs/{jobId}/retry", async (IAxonJobStore jobStore, string jobId) =>
+            var retryJob = axon.MapPost("/jobs/{jobId}/retry", async (IAxonJobStore jobStore, IAxonDashboardNotifier notifier, string jobId) =>
             {
                 var job = await jobStore.GetJob(jobId);
                 if (job is null) return Results.NotFound();
 
                 await jobStore.Requeue(jobId);
+                await notifier.JobsChanged();
                 return Results.NoContent();
             });
 
@@ -285,14 +317,47 @@ public static class DependencyInjection
             axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore) =>
                 Results.Ok(await recurringJobStore.GetAll()));
 
-            var deleteRecurring = axon.MapDelete("/recurring-jobs/{recurringJobId}", async (IAxonRecurringJobStore recurringJobStore, string recurringJobId) =>
+            axon.MapGet("/servers", async (IAxonServerInstanceStore instanceStore) =>
+            {
+                var now = DateTime.UtcNow.Ticks;
+                var instances = await instanceStore.GetAll();
+                return Results.Ok(instances
+                    .OrderByDescending(i => i.LastSeenAt)
+                    .Select(i => new
+                    {
+                        i.InstanceId,
+                        i.MachineName,
+                        i.StartedAt,
+                        i.LastSeenAt,
+                        IsOnline = now - i.LastSeenAt <= ServerInstanceOfflineTimeout.Ticks
+                    }));
+            });
+
+            axon.MapGet("/clients", async (IDeviceConnectionRegistry deviceRegistry, IAxonJobStore jobStore) =>
+            {
+                var clients = deviceRegistry.GetAll();
+                var processingDevices = (await jobStore.GetJobs(take: int.MaxValue, states: [JobState.Processing]))
+                    .Select(j => j.DeviceName)
+                    .ToHashSet();
+
+                return Results.Ok(clients.Select(c => new
+                {
+                    c.DeviceName,
+                    c.ConnectionId,
+                    c.ConnectedAt,
+                    IsProcessing = processingDevices.Contains(c.DeviceName)
+                }));
+            });
+
+            var deleteRecurring = axon.MapDelete("/recurring-jobs/{recurringJobId}", async (IAxonRecurringJobStore recurringJobStore, IAxonDashboardNotifier notifier, string recurringJobId) =>
             {
                 await recurringJobStore.Remove(recurringJobId);
+                await notifier.RecurringJobsChanged();
                 return Results.NoContent();
             });
 
             var triggerRecurring = axon.MapPost("/recurring-jobs/{recurringJobId}/trigger", async (
-                IAxonRecurringJobStore recurringJobStore, IAxonJobStore jobStore, string recurringJobId) =>
+                IAxonRecurringJobStore recurringJobStore, IAxonJobStore jobStore, IAxonDashboardNotifier notifier, string recurringJobId) =>
             {
                 var recurringJob = (await recurringJobStore.GetAll())
                     .FirstOrDefault(r => r.RecurringJobId == recurringJobId);
@@ -305,6 +370,7 @@ public static class DependencyInjection
                     DeviceName = recurringJob.DeviceName,
                     State = JobState.Enqueued
                 });
+                await notifier.JobsChanged();
 
                 return Results.Ok(new { jobId });
             });

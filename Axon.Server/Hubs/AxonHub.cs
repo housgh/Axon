@@ -9,7 +9,8 @@ public class AxonHub(
     IAxonJobService jobService,
     IAxonRecurringJobService recurringJobService,
     IDeviceConnectionRegistry deviceRegistry,
-    IAxonJobStore jobStore) : Hub<AxonHub>
+    IAxonJobStore jobStore,
+    IAxonDashboardNotifier notifier) : Hub<AxonHub>
 {
 
     public override Task OnConnectedAsync()
@@ -18,21 +19,24 @@ public class AxonHub(
         return Task.CompletedTask;
     }
 
-    public void Register(string deviceName)
+    public Task Register(string deviceName)
     {
         deviceRegistry.Register(deviceName, Context.ConnectionId);
+        return notifier.ClientsChanged();
     }
 
-    public Task Enqueue(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor)
+    public async Task Enqueue(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor)
     {
         deviceRegistry.Register(deviceName, Context.ConnectionId);
-        return jobService.EnqueueAsync(deviceName, jobId, jobInfo, scheduledFor);
+        await notifier.ClientsChanged();
+        await jobService.EnqueueAsync(deviceName, jobId, jobInfo, scheduledFor);
     }
 
-    public Task AddOrUpdateRecurring(string deviceName, string recurringJobId, JobInfo jobInfo, string cronExpression)
+    public async Task AddOrUpdateRecurring(string deviceName, string recurringJobId, JobInfo jobInfo, string cronExpression)
     {
         deviceRegistry.Register(deviceName, Context.ConnectionId);
-        return recurringJobService.AddOrUpdateAsync(deviceName, recurringJobId, jobInfo, cronExpression);
+        await notifier.ClientsChanged();
+        await recurringJobService.AddOrUpdateAsync(deviceName, recurringJobId, jobInfo, cronExpression);
     }
 
     public Task RemoveRecurring(string recurringJobId)
@@ -57,6 +61,7 @@ public class AxonHub(
 
         var deviceName = deviceRegistry.GetDeviceName(Context.ConnectionId);
         deviceRegistry.Unregister(Context.ConnectionId);
+        await notifier.ClientsChanged();
 
         // Any job this device was actively processing can no longer be acknowledged on this
         // connection; reclaim it immediately instead of waiting for the processing deadline.

@@ -12,7 +12,7 @@ public interface IAxonJobService
     Task ReclaimOrphanedAsync(Job job);
 }
 
-public class AxonJobService(IAxonJobStore jobStore) : IAxonJobService
+public class AxonJobService(IAxonJobStore jobStore, IAxonDashboardNotifier notifier) : IAxonJobService
 {
     private static readonly TimeSpan[] RetryBackoff =
     [
@@ -21,20 +21,22 @@ public class AxonJobService(IAxonJobStore jobStore) : IAxonJobService
         TimeSpan.FromMinutes(2),
     ];
 
-    public Task EnqueueAsync(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor)
+    public async Task EnqueueAsync(string deviceName, string jobId, JobInfo jobInfo, long? scheduledFor)
     {
-        return jobStore.AddJob(new Job(jobInfo)
+        await jobStore.AddJob(new Job(jobInfo)
         {
             JobId = jobId,
             DeviceName = deviceName,
             ScheduledFor = scheduledFor,
             State = scheduledFor is null ? JobState.Enqueued : JobState.Scheduled
         });
+        await notifier.JobsChanged();
     }
 
-    public Task MarkSucceededAsync(string jobId)
+    public async Task MarkSucceededAsync(string jobId)
     {
-        return jobStore.UpdateState(jobId, JobState.Succeeded);
+        await jobStore.UpdateState(jobId, JobState.Succeeded);
+        await notifier.JobsChanged();
     }
 
     public async Task MarkFailedAsync(string jobId, string? error = null)
@@ -65,6 +67,7 @@ public class AxonJobService(IAxonJobStore jobStore) : IAxonJobService
         {
             await jobStore.UpdateState(job.JobId, JobState.Failed);
         }
+        await notifier.JobsChanged();
     }
 }
 

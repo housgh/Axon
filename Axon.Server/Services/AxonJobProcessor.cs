@@ -13,6 +13,7 @@ public class AxonJobProcessor(
     IAxonJobStore jobStore,
     IAxonJobService jobService,
     IDeviceConnectionRegistry deviceRegistry,
+    IAxonDashboardNotifier notifier,
     ILogger<AxonJobProcessor> logger) : BackgroundService
 {
     private const int PollInterval = 5000;
@@ -68,6 +69,7 @@ public class AxonJobProcessor(
                 // Processing, permanently stranding an already-completed job.
                 var deadline = DateTime.UtcNow.Add(ProcessingTimeout).Ticks;
                 await jobStore.MarkProcessing(job.JobId, deadline, $"Dispatched to {job.DeviceName}");
+                await notifier.JobsChanged();
                 await hubContext.Clients.Client(connectionId)
                     .SendCoreAsync("Invoke", [job.JobId, job], stoppingToken);
             }

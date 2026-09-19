@@ -9,6 +9,7 @@ namespace Axon.Server.Services;
 public class AxonRecurringJobProcessor(
     IAxonRecurringJobStore recurringJobStore,
     IAxonJobStore jobStore,
+    IAxonDashboardNotifier notifier,
     ILogger<AxonRecurringJobProcessor> logger) : BackgroundService
 {
     private const int PollInterval = 15000;
@@ -28,6 +29,7 @@ public class AxonRecurringJobProcessor(
                     DeviceName = recurringJob.DeviceName,
                     State = JobState.Enqueued
                 });
+                await notifier.JobsChanged();
 
                 try
                 {
@@ -40,6 +42,7 @@ public class AxonRecurringJobProcessor(
                     logger.LogError(e, "Failed to compute next occurrence for recurring job {RecurringJobId}; removing it", recurringJob.RecurringJobId);
                     await recurringJobStore.Remove(recurringJob.RecurringJobId);
                 }
+                await notifier.RecurringJobsChanged();
             }
 
             await Task.Delay(PollInterval, stoppingToken);

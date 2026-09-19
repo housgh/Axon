@@ -145,7 +145,15 @@ await axonClient.RemoveRecurringAsync("hourly-hello");
 
 ### 6. Open the dashboard
 
-Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password to view jobs, job history, and recurring job definitions. `ReadOnly` users see the same data but without retry/delete/trigger controls.
+Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password. The dashboard is organized into four tabs:
+- **Jobs** — job history, state, retry/delete.
+- **Recurring jobs** — schedules, last/next run, trigger/remove.
+- **Servers** — active `Axon.Server` instances, each heartbeating every 15s and shown offline once its heartbeat is more than 45s old. With the default in-memory store an instance only ever sees itself; use `Axon.Store.SqlServer` to see every instance behind a multi-instance deployment.
+- **Clients** — devices with an open connection to *this* server instance (a SignalR connection is pinned to whichever instance accepted it, so this is always instance-local, regardless of storage backend), shown Idle or Processing depending on whether a job is currently dispatched to them.
+
+`ReadOnly` users see the same data but without retry/delete/trigger controls.
+
+The dashboard updates in real time over a dedicated SignalR connection (`/axon/hub`, gated by the same dashboard auth) rather than polling: every job, recurring-job, server, or client change is pushed to open dashboard tabs the moment it happens. If that connection is ever unavailable (network blip, outbound access to the SignalR JS CDN blocked, etc.) the dashboard automatically falls back to polling every 5s and keeps retrying the push connection in the background.
 
 See [Axon.Example](Axon.Example) for a complete, runnable ASP.NET Core project wired up end-to-end (server + client in the same process).
 

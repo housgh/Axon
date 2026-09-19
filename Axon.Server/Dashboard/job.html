@@ -4,6 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Job Details — Axon Dashboard</title>
+<link rel="icon" href="/axon/favicon.ico" />
 <style>
   :root {
     color-scheme: light dark;
@@ -249,25 +250,13 @@
   }
   .note-plain { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
 
-  /* Attempt group: a collapsed retry cycle (dispatch -> failure -> backoff) */
-  .attempt-group > summary {
-    list-style: none;
-    cursor: pointer;
+  /* Attempt group: a retry cycle (dispatch -> failure -> backoff), always expanded */
+  .attempt-group > .attempt-summary {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
   }
-  .attempt-group > summary::-webkit-details-marker { display: none; }
-  .attempt-group > summary::before {
-    content: '▸';
-    font-size: 10px;
-    color: var(--text-faint);
-    transition: transform 0.1s;
-    flex-shrink: 0;
-  }
-  .attempt-group[open] > summary::before { transform: rotate(90deg); }
-  .attempt-group > summary:hover .attempt-label { color: var(--text); }
   .attempt-label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
   .attempt-group .sub-timeline {
     list-style: none;
@@ -436,10 +425,10 @@
 
     return '<li>' +
       '<span class="dot failed"></span>' +
-      '<details class="attempt-group"' + (isLastGroup ? ' open' : '') + '>' +
-        '<summary>' + summaryLine + '</summary>' +
+      '<div class="attempt-group">' +
+        '<div class="attempt-summary">' + summaryLine + '</div>' +
         '<ul class="sub-timeline">' + subEvents + '</ul>' +
-      '</details>' +
+      '</div>' +
     '</li>';
   }
 
