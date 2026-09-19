@@ -53,4 +53,20 @@ public class AxonServerRedisDependencyInjectionTests
 
         act.Should().Throw<ArgumentException>().WithMessage("*Redis connection string*");
     }
+
+    [Fact]
+    public void AddRedisBackplane_RegistersRedisBackplaneHealthCheck()
+    {
+        var services = new ServiceCollection();
+
+        services.AddAxonServer().AddRedisBackplane("localhost:0");
+
+        var options = services.BuildServiceProvider()
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckServiceOptions>>()
+            .Value;
+        var registration = options.Registrations.FirstOrDefault(r => r.Name == "axon-redis-backplane");
+
+        registration.Should().NotBeNull();
+        registration!.Tags.Should().Contain("ready");
+    }
 }

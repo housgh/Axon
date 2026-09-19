@@ -27,6 +27,14 @@ public static class AxonServerRedisDependencyInjection
             throw new ArgumentException("A Redis connection string must be provided.", nameof(connectionString));
 
         builder.Services.AddSignalR().AddStackExchangeRedis(connectionString, options => configure?.Invoke(options));
+
+        // "ready" matches Axon.Server.DependencyInjection's own ReadinessHealthCheckTag constant
+        // (private to that class, so duplicated here as a literal) - registering under the same
+        // tag means this check is included in /axon/health/ready alongside AxonJobStoreHealthCheck
+        // without Axon.Server needing to know Axon.Server.Redis exists.
+        builder.Services.AddHealthChecks()
+            .AddCheck("axon-redis-backplane", new RedisBackplaneHealthCheck(connectionString), tags: ["ready"]);
+
         return builder;
     }
 }
