@@ -23,6 +23,9 @@ public static class AxonServerRedisDependencyInjection
     /// </summary>
     public static AxonServerBuilder AddRedisBackplane(this AxonServerBuilder builder, string connectionString, Action<RedisOptions>? configure = null)
     {
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new ArgumentException("A Redis connection string must be provided.", nameof(connectionString));
+
         builder.Services.AddSignalR().AddStackExchangeRedis(connectionString, options => configure?.Invoke(options));
         return builder;
     }

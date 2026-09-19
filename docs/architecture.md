@@ -100,6 +100,14 @@ flowchart LR
     end
 ```
 
+## Graceful shutdown
+
+Axon.Server never executes job bodies itself - those run on `Axon.Client`, on a different process/machine - so there's no in-flight job *execution* for the server to drain on shutdown. What can happen mid-shutdown is `AxonJobProcessor` being cancelled between claiming a job (`TryClaimJob` succeeds, State becomes `Processing`) and finishing the SignalR dispatch call. This is already safe without any special shutdown handling: a claimed-but-undispatched job looks identical, from the store's perspective, to a dispatched-but-unacknowledged one, so the same deadline-sweep path in [Orphan reclaim](#orphan-reclaim-crash--disconnect-recovery) picks it up and retries it - whether the process exited via a crash or a normal shutdown.
+
+`AxonServerInstanceHeartbeat` does have explicit `StopAsync` cleanup (deregistering the instance immediately, rather than waiting for its heartbeat to go stale), so the dashboard's Servers tab reflects a graceful shutdown right away instead of a 45s timeout.
+
+If you want a longer window for in-flight HTTP requests (dashboard API calls, SignalR message delivery) to finish before the process exits, configure ASP.NET Core's standard `HostOptions.ShutdownTimeout` (default 30s) - this is a general ASP.NET Core setting, not something Axon-specific.
+
 ## SQL store transactional writes
 
 Every paired state-change write (job state + history row) runs inside a single SQL transaction, so a failure between the two statements can't leave the history table out of sync with the job's actual state:

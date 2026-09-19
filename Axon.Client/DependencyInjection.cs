@@ -10,6 +10,9 @@ public static class DependencyInjection
 {
     public static void AddAxonClient(this IServiceCollection services, string baseUrl)
     {
+        if (string.IsNullOrWhiteSpace(baseUrl))
+            throw new ArgumentException("An Axon.Server base URL must be provided.", nameof(baseUrl));
+
         baseUrl = baseUrl.TrimEnd('/');
         var connection = new HubConnectionBuilder()
             .WithUrl($"{baseUrl}/hubs/axon")

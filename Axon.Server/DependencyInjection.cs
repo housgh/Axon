@@ -2,6 +2,7 @@
 
 using System.Reflection;
 using System.Security.Claims;
+using System.Threading.RateLimiting;
 using Axon.Core.Enums;
 using Axon.Server.Hubs;
 using Axon.Server.Interfaces;
@@ -10,11 +11,12 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
-using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 
 namespace Axon.Server.DependencyInjection;
@@ -25,6 +27,7 @@ public static class DependencyInjection
     private const string AuthPolicy = "AxonDashboardAuth";
     private const string WritePolicy = "AxonDashboardWrite";
     private const string LoginRateLimitPolicy = "AxonLogin";
+    private const string ReadinessHealthCheckTag = "ready";
 
     // An instance is considered offline once its heartbeat (every 15s, see
     // AxonServerInstanceHeartbeat) is older than this - generous enough to absorb a couple of
@@ -80,6 +83,7 @@ public static class DependencyInjection
         services.AddHostedService<AxonJobProcessor>();
         services.AddHostedService<AxonRecurringJobProcessor>();
         services.AddHostedService<AxonServerInstanceHeartbeat>();
+        services.AddHealthChecks().AddCheck<AxonJobStoreHealthCheck>("axon-job-store", tags: [ReadinessHealthCheckTag]);
 
         return new AxonServerBuilder(services);
     }
@@ -204,6 +208,14 @@ public static class DependencyInjection
         }
 
         app.MapHub<AxonHub>("/hubs/axon");
+
+        // Always mapped, regardless of AddAxonApiEndpoints()/AddAxonDashboard() and regardless of
+        // dashboard auth: orchestrator health probes need these independent of whether Axon's
+        // HTTP API/dashboard is opted into, and typically can't authenticate anyway. Neither
+        // exposes anything beyond up/down - /live never touches the job store, /ready only
+        // reports the AxonJobStoreHealthCheck's Healthy/Unhealthy result.
+        app.MapHealthChecks("/axon/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+        app.MapHealthChecks("/axon/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains(ReadinessHealthCheckTag) }).AllowAnonymous();
 
         var features = app.Services.GetService<AxonServerFeatures>();
         var apiEnabled = features?.ApiEnabled ?? false;

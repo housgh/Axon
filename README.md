@@ -144,7 +144,9 @@ builder.Services.AddAxonClient(axonBaseUrl); // e.g. "https://localhost:7221"
 app.UseAxonServer();
 ```
 
-This maps the SignalR hub (`/hubs/axon`) and, if opted into in step 1, the `/axon` API/dashboard.
+This maps the SignalR hub (`/hubs/axon`) and, if opted into in step 1, the `/axon` API/dashboard. It also always maps two unauthenticated health check endpoints for orchestrators (Kubernetes, ECS, etc.), regardless of whether the API/dashboard is opted into or dashboard auth is configured:
+- `GET /axon/health/live` — always `200 Healthy` once the process is up; use as a liveness probe.
+- `GET /axon/health/ready` — `200 Healthy` only if the configured job store (in-memory or `Axon.Store.SqlServer`) can actually be reached; use as a readiness probe so an orchestrator stops routing traffic to an instance whose database connection is down.
 
 ### 7. Enqueue, schedule, and run recurring jobs
 
@@ -219,6 +221,12 @@ With `Axon.Server.OpenTelemetry` (see Usage above), `Axon.Server` emits:
 **Traces** (activity source `Axon.Server`): spans around enqueue, claim/dispatch, success/failure acknowledgement, and orphan reclaim, tagged with `axon.job_id`/`axon.device_name`.
 
 These are plain `System.Diagnostics.Metrics`/`System.Diagnostics.ActivitySource` primitives — `Axon.Server` itself has no OpenTelemetry dependency, so they're emitted (at effectively zero cost) whether or not anything is listening. `Axon.Server.OpenTelemetry` just wires an OTel SDK to collect them; any other listener (including a host app's own OTel setup, via `AddMeter("Axon.Server")`/`AddSource("Axon.Server")`) can attach to them directly instead.
+
+## Operational maturity
+
+- **Health checks**: `/axon/health/live` and `/axon/health/ready` (see Usage step 6 above) for orchestrator liveness/readiness probes.
+- **Graceful shutdown**: abrupt termination is already safe by design — see [docs/architecture.md#graceful-shutdown](docs/architecture.md#graceful-shutdown) for why no explicit drain logic is needed beyond ASP.NET Core's standard `HostOptions.ShutdownTimeout`.
+- **Config validation**: `AddAxonSqlServerStore`, `AddRedisBackplane`, `AddAxonClient`, and `.AddAuthentication(...)` all validate their required configuration (connection strings, URLs, dashboard users) at startup and throw immediately with a clear message, rather than failing confusingly on first use deep in a background service.
 
 ## Testing
 

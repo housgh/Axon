@@ -1,6 +1,6 @@
 using Axon.Server.DependencyInjection;
-using Axon.Server.Hubs;
 using Axon.Server.Redis;
+using Axon.Server.Hubs;
 using FluentAssertions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,5 +38,19 @@ public class AxonServerRedisDependencyInjectionTests
         var result = original.AddRedisBackplane("localhost:0");
 
         result.Should().BeSameAs(original);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AddRedisBackplane_InvalidConnectionString_ThrowsWithClearMessage(string? connectionString)
+    {
+        var services = new ServiceCollection();
+        var builder = services.AddAxonServer();
+
+        var act = () => builder.AddRedisBackplane(connectionString!);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*Redis connection string*");
     }
 }

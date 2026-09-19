@@ -29,6 +29,7 @@
     <ProjectReference Include="..\..\Axon.Core\Axon.Core.csproj" />
     <ProjectReference Include="..\..\Axon.Server.Redis\Axon.Server.Redis.csproj" />
     <ProjectReference Include="..\..\Axon.Server.OpenTelemetry\Axon.Server.OpenTelemetry.csproj" />
+    <ProjectReference Include="..\..\Axon.Client\Axon.Client.csproj" />
   </ItemGroup>
 
 </Project>
