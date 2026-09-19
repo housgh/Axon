@@ -308,6 +308,12 @@ Once tagged `1.0.0`, the intent is standard [SemVer](https://semver.org/): a **p
 
 **This project is pre-1.0** (see Status below) and has not yet made that commitment — the `0.0.x`/`0.x.y` versions released so far may include breaking changes in a minor or patch bump. Treat every pre-1.0 upgrade as a potential breaking change until the 1.0.0 release, after which the policy above applies.
 
+See [CHANGELOG.md](CHANGELOG.md) for what's changed.
+
 ## Status
 
 This is a proof of concept. See the [repository](https://github.com/housgh/Axon) for source, issues, and usage examples.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
