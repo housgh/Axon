@@ -201,10 +201,11 @@ internal class AxonClient : IAxonClient
 
     private async void OnInvoke(string jobId, JobInfo jobInfo)
     {
+        ActivatedJob activated = default;
         try
         {
-            var instance = JobActivator.Current.CreateInstance(jobInfo);
-            var methodInfo = instance?.GetType().GetMethod(jobInfo.MethodName);
+            activated = JobActivator.Current.CreateInstance(jobInfo);
+            var methodInfo = activated.Instance?.GetType().GetMethod(jobInfo.MethodName);
             if (methodInfo is null)
             {
                 await _hubConnection.InvokeAsync("OnFail", jobId, $"Could not find method: {jobInfo.MethodName}");
@@ -212,7 +213,7 @@ internal class AxonClient : IAxonClient
             }
 
             var arguments = JsonElementHelper.ToObjectArray(jobInfo.Arguments.ToArray());
-            methodInfo.Invoke(instance, arguments);
+            methodInfo.Invoke(activated.Instance, arguments);
             await _hubConnection.InvokeAsync("OnSuccess", jobId);
         }
         catch (FileNotFoundException)
@@ -222,6 +223,13 @@ internal class AxonClient : IAxonClient
         catch (Exception e)
         {
             await _hubConnection.InvokeAsync("OnFail", jobId, e.ToString());
+        }
+        finally
+        {
+            // Disposed only now - after the job method has actually run, not right after
+            // activation - so a scoped dependency (e.g. ServiceProviderJobActivator's DI scope)
+            // injected into the job's constructor stays alive for the whole call.
+            activated.Scope?.Dispose();
         }
     }
 }
