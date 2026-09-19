@@ -190,11 +190,11 @@ public class MyClass
 }
 ```
 
-By default, a failed job retries up to 3 times with 10s/30s/2min backoff. Override this per job with an `AxonRetryPolicy` on `EnqueueAsync`/`ScheduleAsync`:
+By default, a failed job retries up to 3 times with 10s/30s/2min backoff. Override this per job with an `AxonRetryPolicy` on the `AxonEnqueueOptions` accepted by `EnqueueAsync`/`ScheduleAsync`/`ContinueWithAsync`:
 
 ```csharp
 var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.WriteHelloWorld("Hello World"),
-    retryPolicy: new AxonRetryPolicy { MaxAttempts = 5, RetryDelaysSeconds = [5, 30, 120] });
+    new AxonEnqueueOptions { RetryPolicy = new AxonRetryPolicy { MaxAttempts = 5, RetryDelaysSeconds = [5, 30, 120] } });
 ```
 
 `MaxAttempts` is the total attempts including the first (so `5` means up to 4 retries). `RetryDelaysSeconds` is indexed by retry attempt (0-based); once exhausted, the last entry is reused for every further retry — so `[5, 30, 120]` with `MaxAttempts = 10` retries at 5s, 30s, then 120s, 120s, 120s, ... for the remaining attempts.
@@ -203,7 +203,7 @@ Cap how many jobs of a given type may be `Processing` at once across the whole f
 
 ```csharp
 var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.SendEmail(...),
-    concurrencyKey: "email-sender", maxConcurrent: 5);
+    new AxonEnqueueOptions { ConcurrencyKey = "email-sender", MaxConcurrent = 5 });
 ```
 
 At most 5 jobs sharing the `"email-sender"` key will be `Processing` at once; a 6th stays `Enqueued` until one of the 5 finishes (succeeds, fails terminally, or is reclaimed as orphaned). The limit is enforced atomically inside the same claim operation that makes multi-instance dispatch safe (see [docs/architecture.md#multi-instance-dispatch-safety](docs/architecture.md#multi-instance-dispatch-safety)), so it holds even with multiple `Axon.Server` instances racing to claim jobs sharing a key against `Axon.Store.SqlServer`.
@@ -218,7 +218,7 @@ public class EmailJobs
 }
 ```
 
-An explicit `concurrencyKey` argument on `EnqueueAsync`/`ScheduleAsync` always overrides the attribute when both are present.
+An explicit `AxonEnqueueOptions.ConcurrencyKey` always overrides the attribute when both are present.
 
 Chain a job to run only after another one finishes with `ContinueWithAsync`:
 

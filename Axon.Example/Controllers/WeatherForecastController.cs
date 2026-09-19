@@ -34,7 +34,7 @@ public class WeatherForecastController(IAxonClient axonClient) : ControllerBase
     public async Task<IActionResult> FailTestCustomRetry()
     {
         var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.AlwaysThrows(),
-            retryPolicy: new AxonRetryPolicy { MaxAttempts = 2, RetryDelaysSeconds = [2] });
+            new AxonEnqueueOptions { RetryPolicy = new AxonRetryPolicy { MaxAttempts = 2, RetryDelaysSeconds = [2] } });
         return Ok(new { JobId = jobId });
     }
 
@@ -47,7 +47,7 @@ public class WeatherForecastController(IAxonClient axonClient) : ControllerBase
         // there being a single worker, so this endpoint demonstrates the API rather than visibly
         // observable throttling (that needs multiple connected clients to see).
         var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.WriteHelloWorld("Hello World"),
-            concurrencyKey: "email-sender", maxConcurrent: 2);
+            new AxonEnqueueOptions { ConcurrencyKey = "email-sender", MaxConcurrent = 2 });
         return Ok(new { JobId = jobId });
     }
 

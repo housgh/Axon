@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Axon.Client.Services;
 using Axon.Core;
+using Axon.Core.Models;
 using FluentAssertions;
 
 namespace Axon.Tests.Unit;
@@ -20,7 +21,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, retryPolicy: null, concurrencyKey: null, maxConcurrent: null);
+        var jobInfo = AxonClient.GetJobInfo(call, options: null);
 
         jobInfo!.ConcurrencyKey.Should().BeNull();
         jobInfo.MaxConcurrent.Should().BeNull();
@@ -31,7 +32,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, retryPolicy: null, concurrencyKey: "explicit-key", maxConcurrent: 3);
+        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { ConcurrencyKey = "explicit-key", MaxConcurrent = 3 });
 
         jobInfo!.ConcurrencyKey.Should().Be("explicit-key");
         jobInfo.MaxConcurrent.Should().Be(3);
@@ -42,7 +43,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.LimitedMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, retryPolicy: null, concurrencyKey: null, maxConcurrent: null);
+        var jobInfo = AxonClient.GetJobInfo(call, options: null);
 
         jobInfo!.ConcurrencyKey.Should().Be("email-sender");
         jobInfo.MaxConcurrent.Should().Be(5);
@@ -53,7 +54,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.LimitedMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, retryPolicy: null, concurrencyKey: "override-key", maxConcurrent: 99);
+        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { ConcurrencyKey = "override-key", MaxConcurrent = 99 });
 
         jobInfo!.ConcurrencyKey.Should().Be("override-key");
         jobInfo.MaxConcurrent.Should().Be(99);
