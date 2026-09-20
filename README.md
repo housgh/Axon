@@ -9,7 +9,7 @@ Axon.Server acts purely as a scheduler/dispatcher — it never executes your job
 **Transport:** dispatch uses [SignalR](https://learn.microsoft.com/aspnet/core/signalr/introduction) over WebSockets — each `Axon.Client` opens one long-lived WebSocket connection to `Axon.Server` (with automatic reconnect) and the server pushes jobs down that connection as they become due, rather than clients polling for work. This means:
 - Both ends need a network path that allows WebSocket upgrades (most reverse proxies/load balancers need this enabled explicitly).
 - A client only receives jobs while its connection is open; if it disconnects, dispatched-but-unacknowledged jobs are reclaimed and retried (see [docs/architecture.md](docs/architecture.md)) rather than lost.
-- Running `Axon.Server` behind multiple instances requires a backplane (`Axon.Server.Redis`, see below) or sticky sessions, since a client's WebSocket is pinned to whichever server instance accepted it. Dispatch itself is safe across instances sharing `Axon.Store.SqlServer` — each instance atomically claims a job before dispatching it (see [docs/architecture.md](docs/architecture.md#multi-instance-dispatch-safety)), so at most one instance ever dispatches a given job even if several see it as due in the same poll cycle. The backplane requirement is specifically about routing a client's *inbound* WebSocket traffic to the right instance, not about dispatch correctness.
+- Running `Axon.Server` behind multiple instances requires a backplane (`Axon.Server.Redis`, see below) or sticky sessions, since a client's WebSocket is pinned to whichever server instance accepted it. Dispatch itself is safe across instances sharing `Axon.Store.SqlServer` or `Axon.Store.Postgres` — each instance atomically claims a job before dispatching it (see [docs/architecture.md](docs/architecture.md#multi-instance-dispatch-safety)), so at most one instance ever dispatches a given job even if several see it as due in the same poll cycle. The backplane requirement is specifically about routing a client's *inbound* WebSocket traffic to the right instance, not about dispatch correctness.
 
 ## Packages
 
@@ -22,6 +22,7 @@ namespaces, project names, and everything else in this repo are still `Axon.*`.
 | `Axon.Client` | `GoAxon.Client` | Enqueue jobs, schedule recurring jobs, and execute dispatched jobs inside your service. |
 | `Axon.Server` | `GoAxon.Server` | The scheduler/dispatcher: SignalR hub, job store, background processors, and an admin dashboard. |
 | `Axon.Store.SqlServer` | `GoAxon.Store.SqlServer` | SQL Server-backed persistence for `Axon.Server` (in-memory storage is used by default). |
+| `Axon.Store.Postgres` | `GoAxon.Store.Postgres` | PostgreSQL-backed persistence for `Axon.Server`, same role as `Axon.Store.SqlServer`. |
 | `Axon.Server.Redis` | `GoAxon.Server.Redis` | Redis SignalR backplane for `Axon.Server`, so job dispatch and dashboard push reach clients connected to any instance behind a load balancer. Optional, separate package so `Axon.Server` itself doesn't carry a Redis dependency; other backplane options may be added as their own packages later. |
 | `Axon.Server.OpenTelemetry` | `GoAxon.Server.OpenTelemetry` | Wires an OpenTelemetry SDK to `Axon.Server`'s built-in metrics and traces (queue depth, dispatch latency, job outcome counters, dispatch/enqueue/ack spans). Optional, separate package for the same reason as `Axon.Server.Redis`. |
 
@@ -34,10 +35,12 @@ dotnet add package GoAxon.Server
 dotnet add package GoAxon.Client
 ```
 
-Add `Axon.Store.SqlServer` if you want job/recurring-job state to survive a restart instead of living in memory:
+Add `Axon.Store.SqlServer` (or `Axon.Store.Postgres`) if you want job/recurring-job state to survive a restart instead of living in memory:
 
 ```bash
 dotnet add package GoAxon.Store.SqlServer
+# or
+dotnet add package GoAxon.Store.Postgres
 ```
 
 Add `Axon.Server.Redis` if you're running more than one `Axon.Server` instance behind a load balancer:
@@ -95,17 +98,27 @@ Dashboard access is username/password with per-user roles: `Admin` users can vie
 }
 ```
 
-### 2. (Optional) Register SQL Server-backed storage
+### 2. (Optional) Register durable storage
 
-By default job and recurring-job state live in memory and are lost on restart. To persist them, run `Axon.Store.SqlServer/Schema.sql` against your database, then:
+By default job and recurring-job state live in memory and are lost on restart. To persist them, run the chosen backend's `Schema.sql` against your database, then register it:
 
 ```csharp
+// SQL Server: run Axon.Store.SqlServer/Schema.sql first
 var sqlConnectionString = builder.Configuration["Axon:SqlConnectionString"];
 if (!string.IsNullOrEmpty(sqlConnectionString))
 {
     builder.Services.AddAxonSqlServerStore(sqlConnectionString);
 }
+
+// PostgreSQL: run Axon.Store.Postgres/Schema.sql first
+var postgresConnectionString = builder.Configuration["Axon:PostgresConnectionString"];
+if (!string.IsNullOrEmpty(postgresConnectionString))
+{
+    builder.Services.AddAxonPostgresStore(postgresConnectionString);
+}
 ```
+
+Only register one backend — whichever call runs last wins, since both replace the same underlying services.
 
 ### 3. (Optional) Register the Redis backplane
 
@@ -117,7 +130,7 @@ builder.Services.AddAxonServer()
     .AddAxonDashboard();
 ```
 
-Without this, a client's connection is pinned to whichever instance accepted it, so a job dispatched by instance A never reaches a client connected to instance B. (The dashboard's Servers/Clients tabs are a separate concern, fixed by `Axon.Store.SqlServer` rather than the backplane — see below.)
+Without this, a client's connection is pinned to whichever instance accepted it, so a job dispatched by instance A never reaches a client connected to instance B. (The dashboard's Servers/Clients tabs are a separate concern, fixed by `Axon.Store.SqlServer`/`Axon.Store.Postgres` rather than the backplane — see below.)
 
 ### 4. (Optional) Register observability
 
@@ -161,7 +174,7 @@ app.UseAxonServer();
 
 This maps the SignalR hub (`/hubs/axon`) and, if opted into in step 1, the `/axon` API/dashboard. It also always maps two unauthenticated health check endpoints for orchestrators (Kubernetes, ECS, etc.), regardless of whether the API/dashboard is opted into or dashboard auth is configured:
 - `GET /axon/health/live` — always `200 Healthy` once the process is up; use as a liveness probe.
-- `GET /axon/health/ready` — `200 Healthy` only if the configured job store (in-memory or `Axon.Store.SqlServer`) can actually be reached; use as a readiness probe so an orchestrator stops routing traffic to an instance whose database connection is down.
+- `GET /axon/health/ready` — `200 Healthy` only if the configured job store (in-memory, `Axon.Store.SqlServer`, or `Axon.Store.Postgres`) can actually be reached; use as a readiness probe so an orchestrator stops routing traffic to an instance whose database connection is down.
 
 ### 8. Enqueue, schedule, and run recurring jobs
 
@@ -209,7 +222,7 @@ var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.SendEmail(...),
     new AxonEnqueueOptions { ConcurrencyKey = "email-sender", MaxConcurrent = 5 });
 ```
 
-At most 5 jobs sharing the `"email-sender"` key will be `Processing` at once; a 6th stays `Enqueued` until one of the 5 finishes (succeeds, fails terminally, or is reclaimed as orphaned). The limit is enforced atomically inside the same claim operation that makes multi-instance dispatch safe (see [docs/architecture.md#multi-instance-dispatch-safety](docs/architecture.md#multi-instance-dispatch-safety)), so it holds even with multiple `Axon.Server` instances racing to claim jobs sharing a key against `Axon.Store.SqlServer`.
+At most 5 jobs sharing the `"email-sender"` key will be `Processing` at once; a 6th stays `Enqueued` until one of the 5 finishes (succeeds, fails terminally, or is reclaimed as orphaned). The limit is enforced atomically inside the same claim operation that makes multi-instance dispatch safe (see [docs/architecture.md#multi-instance-dispatch-safety](docs/architecture.md#multi-instance-dispatch-safety)), so it holds even with multiple `Axon.Server` instances racing to claim jobs sharing a key against `Axon.Store.SqlServer` or `Axon.Store.Postgres`.
 
 Instead of passing `concurrencyKey`/`maxConcurrent` at every call site, declare a default on the method itself:
 
@@ -256,8 +269,8 @@ A recurring job can be paused, resumed, or skip its single next occurrence — f
 Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password. The dashboard is organized into four tabs:
 - **Jobs** — job history, state, retry/delete.
 - **Recurring jobs** — schedules, last/next run, trigger/remove.
-- **Servers** — active `Axon.Server` instances, each heartbeating every 15s and shown offline once its heartbeat is more than 45s old. With the default in-memory store an instance only ever sees itself; use `Axon.Store.SqlServer` to see every instance behind a multi-instance deployment.
-- **Clients** — connected devices, shown Idle or Processing depending on whether a job is currently dispatched to them. A SignalR connection is pinned to whichever instance accepted it, so with the default in-memory registry this list is instance-local (`Axon.Server.Redis` makes dispatch/push still reach the right client, but each instance only lists the clients connected to itself); use `Axon.Store.SqlServer` to see every connected client across the whole fleet, regardless of which instance it's connected to.
+- **Servers** — active `Axon.Server` instances, each heartbeating every 15s and shown offline once its heartbeat is more than 45s old. With the default in-memory store an instance only ever sees itself; use `Axon.Store.SqlServer` or `Axon.Store.Postgres` to see every instance behind a multi-instance deployment.
+- **Clients** — connected devices, shown Idle or Processing depending on whether a job is currently dispatched to them. A SignalR connection is pinned to whichever instance accepted it, so with the default in-memory registry this list is instance-local (`Axon.Server.Redis` makes dispatch/push still reach the right client, but each instance only lists the clients connected to itself); use `Axon.Store.SqlServer` or `Axon.Store.Postgres` to see every connected client across the whole fleet, regardless of which instance it's connected to.
 
 `ReadOnly` users see the same data but without retry/delete/trigger controls.
 
@@ -295,7 +308,7 @@ These are plain `System.Diagnostics.Metrics`/`System.Diagnostics.ActivitySource`
 ## Testing
 
 - `tests/Axon.Tests.Unit` — unit tests for the job/recurring-job services, `AxonJobProcessor`'s dispatch logic, `AxonHub`, and the in-memory store, using [NSubstitute](https://nsubstitute.github.io/) for mocking.
-- `tests/Axon.Tests.Integration` — integration tests for `Axon.Store.SqlServer` against a real SQL Server instance spun up via [Testcontainers](https://dotnet.testcontainers.org/) (requires Docker). These cover the same transactional-write and atomic-claim guarantees described above, including a 20-way concurrent `TryClaimJob` race to verify exactly one caller ever wins.
+- `tests/Axon.Tests.Integration` — integration tests for `Axon.Store.SqlServer` and `Axon.Store.Postgres` against real SQL Server/PostgreSQL instances spun up via [Testcontainers](https://dotnet.testcontainers.org/) (requires Docker). These cover the same transactional-write and atomic-claim guarantees described above, including a 20-way concurrent `TryClaimJob` race to verify exactly one caller ever wins.
 
 ```bash
 dotnet test

@@ -31,7 +31,7 @@ sequenceDiagram
 
 ## Multi-instance dispatch safety
 
-Every `AxonJobProcessor` instance (one per `Axon.Server` process) independently polls for due jobs. With `Axon.Store.SqlServer` shared across multiple instances, more than one instance can see the same job as due in the same poll cycle. `TryClaimJob` makes only one of them win:
+Every `AxonJobProcessor` instance (one per `Axon.Server` process) independently polls for due jobs. With `Axon.Store.SqlServer` or `Axon.Store.Postgres` shared across multiple instances, more than one instance can see the same job as due in the same poll cycle. `TryClaimJob` makes only one of them win:
 
 ```mermaid
 flowchart TD
@@ -42,6 +42,11 @@ flowchart TD
 ```
 
 The `WHERE State IN (...)` guard is enforced by SQL Server's row lock for the duration of the `UPDATE`, so exactly one instance's statement can match and affect a row even under truly concurrent execution - the other gets `0` rows affected and must not dispatch. The in-memory store enforces the same guarantee under its own lock, so behavior is consistent regardless of backend (though the in-memory store is inherently single-instance, since nothing shares its state across processes).
+
+The `ConcurrencyKey`/`MaxConcurrent` limit (see the README's concurrency-limit section) adds a second race-safety requirement on top of the plain claim above: the count of currently-`Processing` jobs sharing a `ConcurrencyKey` must be checked atomically against other instances claiming jobs with the same key, not just against the target row itself. Each backend enforces this with its own locking primitive:
+
+- **SQL Server** (`AxonSqlServerStore.TryClaimJob`): `WITH (UPDLOCK, HOLDLOCK)` on the count subquery holds the scanned key-range's locks for the rest of the transaction, so a second concurrent claim against the same key blocks (or deadlocks and retries, on SQL error 1205) rather than reading a stale count.
+- **PostgreSQL** (`AxonPostgresStore.TryClaimJob`): a `pg_advisory_xact_lock` keyed on the job's `ConcurrencyKey` (hashed via `hashtext`) serializes every concurrent claim against that key for the duration of the transaction. A plain `SELECT ... FOR UPDATE` on the count query doesn't work here: when several claims are racing to be the *first* job with a given key to become `Processing`, there's no existing `Processing` row yet for any of them to row-lock, so `FOR UPDATE` alone wouldn't block them against each other - the advisory lock is keyed on the `ConcurrencyKey` value itself, not on any row, so it still serializes them.
 
 ## Job state machine
 

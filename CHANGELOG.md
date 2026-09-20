@@ -7,6 +7,13 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
 
 ## [Unreleased]
 
+### Added
+- `Axon.Store.Postgres`: PostgreSQL-backed job storage for `Axon.Server`, mirroring
+  `Axon.Store.SqlServer`'s feature set (same four store interfaces, same `Schema.sql`-first
+  onboarding, same multi-instance dispatch safety guarantee - see
+  docs/architecture.md#multi-instance-dispatch-safety for how its `ConcurrencyKey` locking
+  differs from SQL Server's).
+
 ## [0.1.2] - 2026-09-20
 
 The first version actually published to NuGet.org. `v0.1.0` and `v0.1.1` were tagged but never
