@@ -5,7 +5,9 @@ All notable changes to the Axon packages are documented here. The format follows
 [README.md#versioning](README.md#versioning) once this project reaches `1.0.0` — every package
 in this repo is released together under one version, from a `vX.Y.Z` git tag.
 
-No version has been tagged yet; everything below is unreleased.
+No version has published successfully to NuGet.org yet; everything below is unreleased.
+(`v0.1.0`/`v0.1.1` were tagged but never actually published — see the `GoAxon.*` rename entry
+below for why.)
 
 ## [Unreleased]
 
@@ -35,6 +37,10 @@ No version has been tagged yet; everything below is unreleased.
   policy — pre-1.0, it lands as part of the initial `1.0.0` API shape instead.
 - Several implementation types (`InMemoryAxonJobStore`, `PasswordHasher`, and others) that were
   public only by omission are now `internal`.
+- NuGet package IDs are now prefixed `GoAxon.*` instead of `Axon.*` (e.g. `GoAxon.Core` instead of
+  `Axon.Core`) — the `Axon.*` ID prefix turned out to be reserved by another publisher on
+  NuGet.org, discovered when the first publish attempt failed. Only the NuGet-facing package ID
+  changed; namespaces, project names, and everything else in this repo are still `Axon.*`.
 
 ### Fixed
 - `Axon.Client`'s SignalR connection and server-side device registration now start eagerly at

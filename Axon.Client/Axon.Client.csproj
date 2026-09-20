@@ -7,7 +7,7 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <PackageId>Axon.Client</PackageId>
+        <PackageId>GoAxon.Client</PackageId>
         <Description>Client library for Axon: enqueue one-off and recurring jobs, and execute jobs dispatched back to this service.</Description>
     </PropertyGroup>
 

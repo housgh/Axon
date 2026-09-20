@@ -13,40 +13,43 @@ Axon.Server acts purely as a scheduler/dispatcher — it never executes your job
 
 ## Packages
 
-| Package | Description |
-|---|---|
-| `Axon.Core` | Shared models and enums used by both client and server. |
-| `Axon.Client` | Enqueue jobs, schedule recurring jobs, and execute dispatched jobs inside your service. |
-| `Axon.Server` | The scheduler/dispatcher: SignalR hub, job store, background processors, and an admin dashboard. |
-| `Axon.Store.SqlServer` | SQL Server-backed persistence for `Axon.Server` (in-memory storage is used by default). |
-| `Axon.Server.Redis` | Redis SignalR backplane for `Axon.Server`, so job dispatch and dashboard push reach clients connected to any instance behind a load balancer. Optional, separate package so `Axon.Server` itself doesn't carry a Redis dependency; other backplane options may be added as their own packages later. |
-| `Axon.Server.OpenTelemetry` | Wires an OpenTelemetry SDK to `Axon.Server`'s built-in metrics and traces (queue depth, dispatch latency, job outcome counters, dispatch/enqueue/ack spans). Optional, separate package for the same reason as `Axon.Server.Redis`. |
+NuGet package IDs are prefixed `GoAxon.*` (the `Axon.*` prefix is reserved by another publisher);
+namespaces, project names, and everything else in this repo are still `Axon.*`.
+
+| Package | NuGet ID | Description |
+|---|---|---|
+| `Axon.Core` | `GoAxon.Core` | Shared models and enums used by both client and server. |
+| `Axon.Client` | `GoAxon.Client` | Enqueue jobs, schedule recurring jobs, and execute dispatched jobs inside your service. |
+| `Axon.Server` | `GoAxon.Server` | The scheduler/dispatcher: SignalR hub, job store, background processors, and an admin dashboard. |
+| `Axon.Store.SqlServer` | `GoAxon.Store.SqlServer` | SQL Server-backed persistence for `Axon.Server` (in-memory storage is used by default). |
+| `Axon.Server.Redis` | `GoAxon.Server.Redis` | Redis SignalR backplane for `Axon.Server`, so job dispatch and dashboard push reach clients connected to any instance behind a load balancer. Optional, separate package so `Axon.Server` itself doesn't carry a Redis dependency; other backplane options may be added as their own packages later. |
+| `Axon.Server.OpenTelemetry` | `GoAxon.Server.OpenTelemetry` | Wires an OpenTelemetry SDK to `Axon.Server`'s built-in metrics and traces (queue depth, dispatch latency, job outcome counters, dispatch/enqueue/ack spans). Optional, separate package for the same reason as `Axon.Server.Redis`. |
 
 ## Installation
 
 Each microservice that hosts the scheduler/dashboard needs `Axon.Server`; each microservice that enqueues or executes jobs (including the one hosting the server, if it does both) needs `Axon.Client`:
 
 ```bash
-dotnet add package Axon.Server
-dotnet add package Axon.Client
+dotnet add package GoAxon.Server
+dotnet add package GoAxon.Client
 ```
 
 Add `Axon.Store.SqlServer` if you want job/recurring-job state to survive a restart instead of living in memory:
 
 ```bash
-dotnet add package Axon.Store.SqlServer
+dotnet add package GoAxon.Store.SqlServer
 ```
 
 Add `Axon.Server.Redis` if you're running more than one `Axon.Server` instance behind a load balancer:
 
 ```bash
-dotnet add package Axon.Server.Redis
+dotnet add package GoAxon.Server.Redis
 ```
 
 Add `Axon.Server.OpenTelemetry` if you want metrics and traces for job dispatch, queue depth, and outcomes:
 
 ```bash
-dotnet add package Axon.Server.OpenTelemetry
+dotnet add package GoAxon.Server.OpenTelemetry
 ```
 
 ## Usage

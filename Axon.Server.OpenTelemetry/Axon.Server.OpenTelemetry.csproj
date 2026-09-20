@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <PackageId>Axon.Server.OpenTelemetry</PackageId>
+        <PackageId>GoAxon.Server.OpenTelemetry</PackageId>
         <Description>Wires an OpenTelemetry SDK to Axon.Server's metrics (queue depth, dispatch latency, execution duration, job outcome counters) and traces (dispatch, claim, enqueue, ack spans).</Description>
     </PropertyGroup>
 

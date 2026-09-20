@@ -8,7 +8,7 @@
     </PropertyGroup>
 
     <PropertyGroup>
-        <PackageId>Axon.Store.SqlServer</PackageId>
+        <PackageId>GoAxon.Store.SqlServer</PackageId>
         <Description>SQL Server-backed job storage for Axon.Server.</Description>
     </PropertyGroup>
 
