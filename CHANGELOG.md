@@ -5,11 +5,13 @@ All notable changes to the Axon packages are documented here. The format follows
 [README.md#versioning](README.md#versioning) once this project reaches `1.0.0` — every package
 in this repo is released together under one version, from a `vX.Y.Z` git tag.
 
-No version has published successfully to NuGet.org yet; everything below is unreleased.
-(`v0.1.0`/`v0.1.1` were tagged but never actually published — see the `GoAxon.*` rename entry
-below for why.)
-
 ## [Unreleased]
+
+## [0.1.2] - 2026-09-20
+
+The first version actually published to NuGet.org. `v0.1.0` and `v0.1.1` were tagged but never
+published — the `Axon.*` NuGet ID prefix turned out to be reserved by another publisher, which is
+why every package ID below is `GoAxon.*` rather than `Axon.*` (see the Changed entry).
 
 ### Added
 - `AxonSqlServerDeviceConnectionStore`, making the dashboard's Clients tab fleet-wide (previously
