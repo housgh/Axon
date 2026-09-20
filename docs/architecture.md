@@ -31,7 +31,7 @@ sequenceDiagram
 
 ## Multi-instance dispatch safety
 
-Every `AxonJobProcessor` instance (one per `Axon.Server` process) independently polls for due jobs. With `Axon.Store.SqlServer` or `Axon.Store.Postgres` shared across multiple instances, more than one instance can see the same job as due in the same poll cycle. `TryClaimJob` makes only one of them win:
+Every `AxonJobProcessor` instance (one per `Axon.Server` process) independently polls for due jobs. With `Axon.Store.SqlServer`, `Axon.Store.Postgres`, or `Axon.Store.MySql` shared across multiple instances, more than one instance can see the same job as due in the same poll cycle. `TryClaimJob` makes only one of them win:
 
 ```mermaid
 flowchart TD
@@ -47,6 +47,7 @@ The `ConcurrencyKey`/`MaxConcurrent` limit (see the README's concurrency-limit s
 
 - **SQL Server** (`AxonSqlServerStore.TryClaimJob`): `WITH (UPDLOCK, HOLDLOCK)` on the count subquery holds the scanned key-range's locks for the rest of the transaction, so a second concurrent claim against the same key blocks (or deadlocks and retries, on SQL error 1205) rather than reading a stale count.
 - **PostgreSQL** (`AxonPostgresStore.TryClaimJob`): a `pg_advisory_xact_lock` keyed on the job's `ConcurrencyKey` (hashed via `hashtext`) serializes every concurrent claim against that key for the duration of the transaction. A plain `SELECT ... FOR UPDATE` on the count query doesn't work here: when several claims are racing to be the *first* job with a given key to become `Processing`, there's no existing `Processing` row yet for any of them to row-lock, so `FOR UPDATE` alone wouldn't block them against each other - the advisory lock is keyed on the `ConcurrencyKey` value itself, not on any row, so it still serializes them.
+- **MySQL** (`AxonMySqlStore.TryClaimJob`): a plain `SELECT ... FOR UPDATE` on the count subquery, relying on InnoDB's default `REPEATABLE READ` isolation - unlike Postgres, InnoDB's locking reads take a next-key (row-plus-gap) lock covering the whole range matched by the `WHERE` clause, including the gap where a not-yet-existing `Processing` row for the key would be inserted, so it does block a concurrent claim racing to become the first `Processing` job for that key (verified directly by the 10-way concurrent `MaxConcurrent` test in `AxonMySqlStoreTests`). Retries on deadlock (InnoDB error 1213), same as SQL Server's 1205 retry.
 
 ## Job state machine
 

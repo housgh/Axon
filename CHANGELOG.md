@@ -13,6 +13,9 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
   onboarding, same multi-instance dispatch safety guarantee - see
   docs/architecture.md#multi-instance-dispatch-safety for how its `ConcurrencyKey` locking
   differs from SQL Server's).
+- `Axon.Store.MySql`: MySQL-backed job storage for `Axon.Server`, same feature set as
+  `Axon.Store.SqlServer`/`Axon.Store.Postgres` (see
+  docs/architecture.md#multi-instance-dispatch-safety for its InnoDB locking approach).
 
 ## [0.1.2] - 2026-09-20
 

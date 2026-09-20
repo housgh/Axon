@@ -47,6 +47,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "deploy", "deploy", "{79F235
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Store.Postgres", "Axon.Store.Postgres\Axon.Store.Postgres.csproj", "{F10EB7B6-551B-4A0F-8AA8-83EA34433C15}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Axon.Store.MySql", "Axon.Store.MySql\Axon.Store.MySql.csproj", "{5A6A6AD3-79D4-4B8E-A20A-917A8590DFD7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -101,6 +103,10 @@ Global
 		{F10EB7B6-551B-4A0F-8AA8-83EA34433C15}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F10EB7B6-551B-4A0F-8AA8-83EA34433C15}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F10EB7B6-551B-4A0F-8AA8-83EA34433C15}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5A6A6AD3-79D4-4B8E-A20A-917A8590DFD7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5A6A6AD3-79D4-4B8E-A20A-917A8590DFD7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5A6A6AD3-79D4-4B8E-A20A-917A8590DFD7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5A6A6AD3-79D4-4B8E-A20A-917A8590DFD7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{6824AFFA-1898-4FF9-A784-EA27B613BD28} = {7D34D4F5-61E1-465C-BA77-E01FF3948998}

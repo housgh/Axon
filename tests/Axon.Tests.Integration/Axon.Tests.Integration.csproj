@@ -14,8 +14,10 @@
     <PackageReference Include="FluentAssertions" Version="7.0.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
     <PackageReference Include="Testcontainers.MsSql" Version="4.15.0" />
+    <PackageReference Include="Testcontainers.MySql" Version="4.15.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
@@ -28,6 +30,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Axon.Store.SqlServer\Axon.Store.SqlServer.csproj" />
     <ProjectReference Include="..\..\Axon.Store.Postgres\Axon.Store.Postgres.csproj" />
+    <ProjectReference Include="..\..\Axon.Store.MySql\Axon.Store.MySql.csproj" />
     <ProjectReference Include="..\..\Axon.Server\Axon.Server.csproj" />
     <ProjectReference Include="..\..\Axon.Core\Axon.Core.csproj" />
   </ItemGroup>
@@ -35,6 +38,7 @@
   <ItemGroup>
     <None Include="..\..\Axon.Store.SqlServer\Schema.sql" Link="Schema.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\Axon.Store.Postgres\Schema.sql" Link="Postgres.Schema.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Axon.Store.MySql\Schema.sql" Link="MySql.Schema.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
