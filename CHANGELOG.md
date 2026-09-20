@@ -16,6 +16,10 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
 - `Axon.Store.MySql`: MySQL-backed job storage for `Axon.Server`, same feature set as
   `Axon.Store.SqlServer`/`Axon.Store.Postgres` (see
   docs/architecture.md#multi-instance-dispatch-safety for its InnoDB locking approach).
+- `Axon.Store.SQLite`: SQLite-backed job storage for `Axon.Server`, for single-instance
+  deployments and local development. Unlike the other three store packages, it does not support
+  multi-instance dispatch (see docs/architecture.md#multi-instance-dispatch-safety) - SQLite's
+  single-writer model serializes all writes process-wide rather than per job/key.
 
 ## [0.1.2] - 2026-09-20
 

@@ -24,6 +24,7 @@ namespaces, project names, and everything else in this repo are still `Axon.*`.
 | `Axon.Store.SqlServer` | `GoAxon.Store.SqlServer` | SQL Server-backed persistence for `Axon.Server` (in-memory storage is used by default). |
 | `Axon.Store.Postgres` | `GoAxon.Store.Postgres` | PostgreSQL-backed persistence for `Axon.Server`, same role as `Axon.Store.SqlServer`. |
 | `Axon.Store.MySql` | `GoAxon.Store.MySql` | MySQL-backed persistence for `Axon.Server`, same role as `Axon.Store.SqlServer`. |
+| `Axon.Store.SQLite` | `GoAxon.Store.SQLite` | SQLite-backed persistence for `Axon.Server`. Single-instance/local-dev only — see the note below. |
 | `Axon.Server.Redis` | `GoAxon.Server.Redis` | Redis SignalR backplane for `Axon.Server`, so job dispatch and dashboard push reach clients connected to any instance behind a load balancer. Optional, separate package so `Axon.Server` itself doesn't carry a Redis dependency; other backplane options may be added as their own packages later. |
 | `Axon.Server.OpenTelemetry` | `GoAxon.Server.OpenTelemetry` | Wires an OpenTelemetry SDK to `Axon.Server`'s built-in metrics and traces (queue depth, dispatch latency, job outcome counters, dispatch/enqueue/ack spans). Optional, separate package for the same reason as `Axon.Server.Redis`. |
 
@@ -36,7 +37,7 @@ dotnet add package GoAxon.Server
 dotnet add package GoAxon.Client
 ```
 
-Add `Axon.Store.SqlServer`, `Axon.Store.Postgres`, or `Axon.Store.MySql` if you want job/recurring-job state to survive a restart instead of living in memory:
+Add `Axon.Store.SqlServer`, `Axon.Store.Postgres`, `Axon.Store.MySql`, or `Axon.Store.SQLite` if you want job/recurring-job state to survive a restart instead of living in memory:
 
 ```bash
 dotnet add package GoAxon.Store.SqlServer
@@ -44,7 +45,14 @@ dotnet add package GoAxon.Store.SqlServer
 dotnet add package GoAxon.Store.Postgres
 # or
 dotnet add package GoAxon.Store.MySql
+# or
+dotnet add package GoAxon.Store.SQLite
 ```
+
+`Axon.Store.SQLite` is the odd one out: SQLite's single-writer model means it does **not**
+support the multi-instance dispatch scenario the other three backends target (see
+[docs/architecture.md#multi-instance-dispatch-safety](docs/architecture.md#multi-instance-dispatch-safety))
+— use it for a single-instance deployment or local development, not a load-balanced fleet.
 
 Add `Axon.Server.Redis` if you're running more than one `Axon.Server` instance behind a load balancer:
 
@@ -125,6 +133,13 @@ var mySqlConnectionString = builder.Configuration["Axon:MySqlConnectionString"];
 if (!string.IsNullOrEmpty(mySqlConnectionString))
 {
     builder.Services.AddAxonMySqlStore(mySqlConnectionString);
+}
+
+// SQLite: run Axon.Store.SQLite/Schema.sql first. Single-instance/local-dev only.
+var sqliteConnectionString = builder.Configuration["Axon:SQLiteConnectionString"];
+if (!string.IsNullOrEmpty(sqliteConnectionString))
+{
+    builder.Services.AddAxonSQLiteStore(sqliteConnectionString);
 }
 ```
 
@@ -318,7 +333,7 @@ These are plain `System.Diagnostics.Metrics`/`System.Diagnostics.ActivitySource`
 ## Testing
 
 - `tests/Axon.Tests.Unit` — unit tests for the job/recurring-job services, `AxonJobProcessor`'s dispatch logic, `AxonHub`, and the in-memory store, using [NSubstitute](https://nsubstitute.github.io/) for mocking.
-- `tests/Axon.Tests.Integration` — integration tests for `Axon.Store.SqlServer`, `Axon.Store.Postgres`, and `Axon.Store.MySql` against real SQL Server/PostgreSQL/MySQL instances spun up via [Testcontainers](https://dotnet.testcontainers.org/) (requires Docker). These cover the same transactional-write and atomic-claim guarantees described above, including a 20-way concurrent `TryClaimJob` race to verify exactly one caller ever wins.
+- `tests/Axon.Tests.Integration` — integration tests for `Axon.Store.SqlServer`, `Axon.Store.Postgres`, `Axon.Store.MySql` (real instances spun up via [Testcontainers](https://dotnet.testcontainers.org/), requires Docker) and `Axon.Store.SQLite` (a real database file, no container needed). These cover the same transactional-write and atomic-claim guarantees described above, including a 20-way concurrent `TryClaimJob` race to verify exactly one caller ever wins.
 
 ```bash
 dotnet test

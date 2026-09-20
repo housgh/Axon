@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="FluentAssertions" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.31" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
@@ -31,6 +32,7 @@
     <ProjectReference Include="..\..\Axon.Store.SqlServer\Axon.Store.SqlServer.csproj" />
     <ProjectReference Include="..\..\Axon.Store.Postgres\Axon.Store.Postgres.csproj" />
     <ProjectReference Include="..\..\Axon.Store.MySql\Axon.Store.MySql.csproj" />
+    <ProjectReference Include="..\..\Axon.Store.SQLite\Axon.Store.SQLite.csproj" />
     <ProjectReference Include="..\..\Axon.Server\Axon.Server.csproj" />
     <ProjectReference Include="..\..\Axon.Core\Axon.Core.csproj" />
   </ItemGroup>
@@ -39,6 +41,7 @@
     <None Include="..\..\Axon.Store.SqlServer\Schema.sql" Link="Schema.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\Axon.Store.Postgres\Schema.sql" Link="Postgres.Schema.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\Axon.Store.MySql\Schema.sql" Link="MySql.Schema.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Axon.Store.SQLite\Schema.sql" Link="SQLite.Schema.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
