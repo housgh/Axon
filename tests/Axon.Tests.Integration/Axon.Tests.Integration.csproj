@@ -17,6 +17,7 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Testcontainers.MongoDb" Version="4.15.0" />
     <PackageReference Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageReference Include="Testcontainers.MySql" Version="4.15.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
@@ -33,6 +34,7 @@
     <ProjectReference Include="..\..\Axon.Store.Postgres\Axon.Store.Postgres.csproj" />
     <ProjectReference Include="..\..\Axon.Store.MySql\Axon.Store.MySql.csproj" />
     <ProjectReference Include="..\..\Axon.Store.SQLite\Axon.Store.SQLite.csproj" />
+    <ProjectReference Include="..\..\Axon.Store.MongoDb\Axon.Store.MongoDb.csproj" />
     <ProjectReference Include="..\..\Axon.Server\Axon.Server.csproj" />
     <ProjectReference Include="..\..\Axon.Core\Axon.Core.csproj" />
   </ItemGroup>

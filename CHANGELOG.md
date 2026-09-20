@@ -20,6 +20,14 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
   deployments and local development. Unlike the other three store packages, it does not support
   multi-instance dispatch (see docs/architecture.md#multi-instance-dispatch-safety) - SQLite's
   single-writer model serializes all writes process-wide rather than per job/key.
+- `Axon.Store.MongoDb`: MongoDB-backed job storage for `Axon.Server`, same four store interfaces
+  and multi-instance dispatch safety guarantee as the SQL backends, but schemaless (no
+  `Schema.sql` - see `Axon.MongoDb.Indexes.EnsureIndexesAsync` for the optional index-creation
+  step) and requiring a replica set for `TryClaimJob`'s transaction-scoped
+  `ConcurrencyKey`/`MaxConcurrent` check to work at all (see
+  docs/architecture.md#multi-instance-dispatch-safety for why, and for how its `ConcurrencyLocks`
+  collection makes MongoDB's per-document write-conflict detection actually catch a race that
+  would otherwise go undetected).
 
 ## [0.1.2] - 2026-09-20
 

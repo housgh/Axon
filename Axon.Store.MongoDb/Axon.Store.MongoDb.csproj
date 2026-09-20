@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Axon.MongoDb</RootNamespace>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PackageId>GoAxon.Store.MongoDb</PackageId>
+        <Description>MongoDB-backed job storage for Axon.Server. TryClaimJob's ConcurrencyKey/MaxConcurrent check requires a replica set (even a single-node one) to run in a transaction - see the README.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="MongoDB.Driver" Version="3.12.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Axon.Server\Axon.Server.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+</Project>
