@@ -145,6 +145,7 @@ public class Job : JobInfo
         RetryPolicy = jobInfo.RetryPolicy;
         ConcurrencyKey = jobInfo.ConcurrencyKey;
         MaxConcurrent = jobInfo.MaxConcurrent;
+        Priority = jobInfo.Priority;
     }
     public string DeviceName { get; set; } = null!;
     public string JobId { get; set; } = null!;

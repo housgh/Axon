@@ -397,6 +397,10 @@
   .badge.failed { background: var(--danger-soft); color: var(--danger); }
   .badge.awaiting-parent { background: var(--neutral-soft); color: var(--neutral); }
   .badge.skipped { background: var(--neutral-soft); color: var(--text-faint); }
+  .badge.priority-low { background: var(--neutral-soft); color: var(--text-faint); }
+  .badge.priority-medium { background: var(--info-soft); color: var(--info); }
+  .badge.priority-high { background: var(--warning-soft); color: var(--warning); }
+  .badge.priority-critical { background: var(--danger-soft); color: var(--danger); }
 
   .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 
@@ -591,6 +595,7 @@
               <th>Job</th>
               <th>Device</th>
               <th>State</th>
+              <th>Priority</th>
               <th>Attempts</th>
               <th>Scheduled for</th>
               <th></th>
@@ -754,6 +759,10 @@
 
   const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed', 'Awaiting parent', 'Skipped'];
   const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed', 'awaiting-parent', 'skipped'];
+  // JobPriority's enum order is Medium=0, Low=1, High=2, Critical=3 (Medium first so
+  // default(JobPriority) is Medium server-side) - these arrays must stay index-aligned with it.
+  const PRIORITY_NAMES = ['Medium', 'Low', 'High', 'Critical'];
+  const PRIORITY_CLASSES = ['priority-medium', 'priority-low', 'priority-high', 'priority-critical'];
   let isReadOnly = false;
 
   const state = {
@@ -915,6 +924,7 @@
 
   function renderJobRow(job) {
     const stateIdx = job.state;
+    const priorityIdx = job.priority || 0;
     const tr = document.createElement('tr');
     tr.className = 'job-row';
 
@@ -934,6 +944,7 @@
       '</td>' +
       '<td><span class="device-name" title="' + escapeHtml(job.deviceName) + '">' + escapeHtml(shortDevice(job.deviceName)) + '</span></td>' +
       '<td><span class="badge ' + STATE_CLASSES[stateIdx] + '">' + STATE_NAMES[stateIdx] + '</span></td>' +
+      '<td><span class="badge ' + PRIORITY_CLASSES[priorityIdx] + '">' + PRIORITY_NAMES[priorityIdx] + '</span></td>' +
       '<td class="mono">' + attemptsCell + '</td>' +
       '<td>' + scheduledCell + '</td>' +
       '<td><div class="row-actions"></div></td>';

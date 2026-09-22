@@ -41,7 +41,8 @@ public class AxonMongoStore(string connectionString, string databaseName) : IAxo
         { "MaxConcurrent", job.MaxConcurrent is null ? BsonNull.Value : job.MaxConcurrent.Value },
         { "ParentJobId", job.ParentJobId is null ? BsonNull.Value : job.ParentJobId },
         { "ContinueOnParentFailure", job.ContinueOnParentFailure },
-        { "IsDeleted", false }
+        { "IsDeleted", false },
+        { "Priority", (int)job.Priority }
     };
 
     private static Job FromDocument(BsonDocument doc) => new(new JobInfo
@@ -52,7 +53,8 @@ public class AxonMongoStore(string connectionString, string databaseName) : IAxo
         DeclaringType = doc["DeclaringType"].AsString,
         RetryPolicy = doc["RetryPolicy"].IsBsonNull ? null : JsonSerializer.Deserialize<AxonRetryPolicy>(doc["RetryPolicy"].AsString),
         ConcurrencyKey = doc["ConcurrencyKey"].IsBsonNull ? null : doc["ConcurrencyKey"].AsString,
-        MaxConcurrent = doc["MaxConcurrent"].IsBsonNull ? null : doc["MaxConcurrent"].AsInt32
+        MaxConcurrent = doc["MaxConcurrent"].IsBsonNull ? null : doc["MaxConcurrent"].AsInt32,
+        Priority = doc.Contains("Priority") ? (JobPriority)doc["Priority"].AsInt32 : JobPriority.Medium
     })
     {
         JobId = doc["_id"].AsString,
@@ -112,17 +114,52 @@ public class AxonMongoStore(string connectionString, string databaseName) : IAxo
 
     public Task<List<Job>> GetJobs(int skip = 0, int take = 20, JobState[]? states = null) => MongoExceptionTranslator.Run(connectionString, async () =>
     {
-        var filter = Builders<BsonDocument>.Filter.Eq("IsDeleted", false);
+        var match = new BsonDocument { { "IsDeleted", false } };
         if (states is { Length: > 0 })
         {
-            filter &= Builders<BsonDocument>.Filter.In("State", states.Select(s => (int)s));
+            match["State"] = new BsonDocument("$in", new BsonArray(states.Select(s => (int)s)));
         }
 
-        var docs = await Jobs.Find(filter)
-            .SortBy(d => d["ScheduledFor"])
-            .Skip(skip)
-            .Limit(take)
-            .ToListAsync();
+        // Effective dispatch score: COALESCE(ScheduledFor, EnqueuedAt) - Boost[Priority],
+        // ascending (lower score = dispatched sooner) - mirrors the SQL backends' ORDER BY
+        // expression (see e.g. AxonSqlServerStore.GetJobs's EffectiveScoreOrderBy). $switch's
+        // branch values must match Axon.Core.Enums.JobPriorityBoost.Ticks exactly - BSON query
+        // text can't reference that dictionary directly. JobPriority's enum order is Medium=0,
+        // Low=1, High=2, Critical=3. A document with no Priority field (written before this
+        // field existed) falls through to the $switch's default, treated as Medium.
+        var pipeline = PipelineDefinition<BsonDocument, BsonDocument>.Create(
+        [
+            new BsonDocument("$match", match),
+            new BsonDocument("$addFields", new BsonDocument
+            {
+                {
+                    "EffectiveScore",
+                    new BsonDocument("$subtract", new BsonArray
+                    {
+                        new BsonDocument("$ifNull", new BsonArray { "$ScheduledFor", "$EnqueuedAt" }),
+                        new BsonDocument("$switch", new BsonDocument
+                        {
+                            {
+                                "branches", new BsonArray
+                                {
+                                    new BsonDocument { { "case", new BsonDocument("$eq", new BsonArray { "$Priority", 0 }) }, { "then", 3_000_000_000L } }, // Medium: 5 min
+                                    new BsonDocument { { "case", new BsonDocument("$eq", new BsonArray { "$Priority", 1 }) }, { "then", 0L } },             // Low: 0
+                                    new BsonDocument { { "case", new BsonDocument("$eq", new BsonArray { "$Priority", 2 }) }, { "then", 9_000_000_000L } }, // High: 15 min
+                                    new BsonDocument { { "case", new BsonDocument("$eq", new BsonArray { "$Priority", 3 }) }, { "then", 36_000_000_000L } } // Critical: 60 min
+                                }
+                            },
+                            { "default", 3_000_000_000L } // no Priority field yet -> treated as Medium
+                        })
+                    })
+                }
+            }),
+            new BsonDocument("$sort", new BsonDocument("EffectiveScore", 1)),
+            new BsonDocument("$skip", skip),
+            new BsonDocument("$limit", take),
+            new BsonDocument("$unset", "EffectiveScore")
+        ]);
+
+        var docs = await Jobs.Aggregate(pipeline).ToListAsync();
         return docs.Select(FromDocument).ToList();
     });
 

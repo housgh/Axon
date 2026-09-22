@@ -44,9 +44,14 @@ internal class InMemoryAxonJobStore : IAxonJobStore
         {
             var query = states is { Length: > 0 }
                 ? _jobs.Where(j => states.Contains(j.State))
-                : _jobs;
+                : _jobs.AsEnumerable();
 
-            return Task.FromResult(query.Skip(skip).Take(take).ToList());
+            // Effective dispatch score: COALESCE(ScheduledFor, EnqueuedAt) - Boost[Priority] -
+            // see JobPriorityBoost for why this shape lets a sufficiently old low-priority job
+            // still win over a recent high-priority one.
+            var ordered = query.OrderBy(j => (j.ScheduledFor ?? j.EnqueuedAt) - JobPriorityBoost.Ticks[j.Priority]);
+
+            return Task.FromResult(ordered.Skip(skip).Take(take).ToList());
         }
     }
 

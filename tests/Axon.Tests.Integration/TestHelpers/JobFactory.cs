@@ -17,7 +17,9 @@ internal static class JobFactory
         string? concurrencyKey = null,
         int? maxConcurrent = null,
         string? parentJobId = null,
-        bool continueOnParentFailure = false) =>
+        bool continueOnParentFailure = false,
+        JobPriority priority = JobPriority.Medium,
+        long? enqueuedAt = null) =>
         new(new JobInfo
         {
             MethodName = "DoWork",
@@ -26,7 +28,8 @@ internal static class JobFactory
             Arguments = ["hello", 42],
             RetryPolicy = retryPolicy,
             ConcurrencyKey = concurrencyKey,
-            MaxConcurrent = maxConcurrent
+            MaxConcurrent = maxConcurrent,
+            Priority = priority
         })
         {
             JobId = jobId ?? Guid.NewGuid().ToString(),
@@ -36,6 +39,7 @@ internal static class JobFactory
             MaxAttempts = maxAttempts,
             ScheduledFor = scheduledFor,
             ParentJobId = parentJobId,
-            ContinueOnParentFailure = continueOnParentFailure
+            ContinueOnParentFailure = continueOnParentFailure,
+            EnqueuedAt = enqueuedAt ?? DateTime.UtcNow.Ticks
         };
 }

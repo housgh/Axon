@@ -50,9 +50,9 @@ public class AxonSQLiteStore(string connectionString) : IAxonJobStore
 
         const string sql = @"
             INSERT INTO ""Jobs""
-            (""JobId"", ""DeviceName"", ""Arguments"", ""MethodName"", ""Assembly"", ""DeclaringType"", ""ScheduledFor"", ""State"", ""Attempts"", ""MaxAttempts"", ""EnqueuedAt"", ""RetryPolicy"", ""ConcurrencyKey"", ""MaxConcurrent"", ""ParentJobId"", ""ContinueOnParentFailure"", ""IsDeleted"")
+            (""JobId"", ""DeviceName"", ""Arguments"", ""MethodName"", ""Assembly"", ""DeclaringType"", ""ScheduledFor"", ""State"", ""Attempts"", ""MaxAttempts"", ""EnqueuedAt"", ""RetryPolicy"", ""ConcurrencyKey"", ""MaxConcurrent"", ""ParentJobId"", ""ContinueOnParentFailure"", ""IsDeleted"", ""Priority"")
             VALUES
-            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, @EnqueuedAt, @RetryPolicy, @ConcurrencyKey, @MaxConcurrent, @ParentJobId, @ContinueOnParentFailure, 0)";
+            (@JobId, @DeviceName, @Arguments, @MethodName, @Assembly, @DeclaringType, @ScheduledFor, @State, @Attempts, @MaxAttempts, @EnqueuedAt, @RetryPolicy, @ConcurrencyKey, @MaxConcurrent, @ParentJobId, @ContinueOnParentFailure, 0, @Priority)";
         await conn.ExecuteAsync(sql, new
         {
             job.JobId,
@@ -70,7 +70,8 @@ public class AxonSQLiteStore(string connectionString) : IAxonJobStore
             job.ConcurrencyKey,
             job.MaxConcurrent,
             job.ParentJobId,
-            job.ContinueOnParentFailure
+            job.ContinueOnParentFailure,
+            Priority = (int)job.Priority
         }, tx);
         await AppendHistory(conn, tx, job.JobId, job.State, null);
 
@@ -93,7 +94,7 @@ public class AxonSQLiteStore(string connectionString) : IAxonJobStore
             const string sql = @"
                 SELECT * FROM ""Jobs""
                 WHERE ""IsDeleted"" = 0 AND ""State"" IN @States
-                ORDER BY ""ScheduledFor""
+                ORDER BY " + EffectiveScoreOrderBy + @"
                 LIMIT @Take OFFSET @Skip";
             return (await conn.QueryAsync<Job>(sql, new
             {
@@ -107,11 +108,23 @@ public class AxonSQLiteStore(string connectionString) : IAxonJobStore
             const string sql = @"
                 SELECT * FROM ""Jobs""
                 WHERE ""IsDeleted"" = 0
-                ORDER BY ""ScheduledFor""
+                ORDER BY " + EffectiveScoreOrderBy + @"
                 LIMIT @Take OFFSET @Skip";
             return (await conn.QueryAsync<Job>(sql, new { Skip = skip, Take = take })).ToList();
         }
     });
+
+    // Effective dispatch score: COALESCE(ScheduledFor, EnqueuedAt) - Boost[Priority], ascending
+    // (lower score = dispatched sooner). The tick literals below must match
+    // Axon.Core.Enums.JobPriorityBoost.Ticks exactly - SQL text can't reference that dictionary
+    // directly. JobPriority's enum order is Medium=0, Low=1, High=2, Critical=3.
+    private const string EffectiveScoreOrderBy = @"
+        COALESCE(""ScheduledFor"", ""EnqueuedAt"") - (CASE ""Priority""
+            WHEN 0 THEN 3000000000  -- Medium: 5 min
+            WHEN 1 THEN 0           -- Low: 0
+            WHEN 2 THEN 9000000000  -- High: 15 min
+            WHEN 3 THEN 36000000000 -- Critical: 60 min
+            ELSE 0 END)";
 
     public Task UpdateState(string id, JobState state, string? note = null) => SQLiteExceptionTranslator.Run(connectionString, async () =>
     {

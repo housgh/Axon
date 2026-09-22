@@ -145,6 +145,10 @@
   .badge.processing { background: var(--warning-soft); color: var(--warning); }
   .badge.succeeded { background: var(--success-soft); color: var(--success); }
   .badge.failed { background: var(--danger-soft); color: var(--danger); }
+  .badge.priority-low { background: var(--neutral-soft); color: var(--text-faint); }
+  .badge.priority-medium { background: var(--info-soft); color: var(--info); }
+  .badge.priority-high { background: var(--warning-soft); color: var(--warning); }
+  .badge.priority-critical { background: var(--danger-soft); color: var(--danger); }
 
   .args-box {
     font-family: var(--mono);
@@ -307,6 +311,10 @@
   const STATE_NAMES = ['Enqueued', 'Scheduled', 'Processing', 'Succeeded', 'Failed'];
   let isReadOnly = false;
   const STATE_CLASSES = ['enqueued', 'scheduled', 'processing', 'succeeded', 'failed'];
+  // JobPriority's enum order is Medium=0, Low=1, High=2, Critical=3 (Medium first so
+  // default(JobPriority) is Medium server-side) - these arrays must stay index-aligned with it.
+  const PRIORITY_NAMES = ['Medium', 'Low', 'High', 'Critical'];
+  const PRIORITY_CLASSES = ['priority-medium', 'priority-low', 'priority-high', 'priority-critical'];
 
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, function (c) {
@@ -515,6 +523,7 @@
         '<dl class="detail-grid">' +
           '<dt>Job ID</dt><dd class="mono">' + escapeHtml(job.jobId) + '</dd>' +
           '<dt>State</dt><dd><span class="badge ' + STATE_CLASSES[job.state] + '">' + STATE_NAMES[job.state] + '</span></dd>' +
+          '<dt>Priority</dt><dd><span class="badge ' + PRIORITY_CLASSES[job.priority || 0] + '">' + PRIORITY_NAMES[job.priority || 0] + '</span></dd>' +
           '<dt>Device</dt><dd class="mono">' + escapeHtml(job.deviceName) + '</dd>' +
           '<dt>Attempts</dt><dd>' + job.attempts + ' / ' + job.maxAttempts + '</dd>' +
           '<dt>Scheduled for</dt><dd>' + (job.scheduledFor ? fmtDate(job.scheduledFor) + ' (' + relativeTime(job.scheduledFor) + ')' : '—') + '</dd>' +

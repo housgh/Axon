@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Axon.Client.Services;
 using Axon.Core;
+using Axon.Core.Enums;
 using Axon.Core.Models;
 using FluentAssertions;
 
@@ -58,5 +59,25 @@ public class AxonClientJobInfoTests
 
         jobInfo!.ConcurrencyKey.Should().Be("override-key");
         jobInfo.MaxConcurrent.Should().Be(99);
+    }
+
+    [Fact]
+    public void GetJobInfo_NoOptions_DefaultsPriorityToMedium()
+    {
+        Expression<Action<TestJobs>> call = x => x.PlainMethod();
+
+        var jobInfo = AxonClient.GetJobInfo(call, options: null);
+
+        jobInfo!.Priority.Should().Be(JobPriority.Medium);
+    }
+
+    [Fact]
+    public void GetJobInfo_ExplicitPriority_UsesExplicitPriority()
+    {
+        Expression<Action<TestJobs>> call = x => x.PlainMethod();
+
+        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { Priority = JobPriority.Critical });
+
+        jobInfo!.Priority.Should().Be(JobPriority.Critical);
     }
 }

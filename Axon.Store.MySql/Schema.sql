@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS `Jobs`
     `ParentJobId`             VARCHAR(64) NULL,
     `ContinueOnParentFailure` TINYINT(1) NOT NULL DEFAULT 0,
     `IsDeleted`               TINYINT(1) NOT NULL DEFAULT 0,
+    `Priority`                INT      NOT NULL DEFAULT 0,
 
     -- MySQL has no partial/filtered indexes (no WHERE clause), so these index the whole table
     -- rather than only IsDeleted = 0 rows the way the SQL Server/Postgres schemas do - the query

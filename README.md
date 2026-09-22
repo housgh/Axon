@@ -283,6 +283,22 @@ public class EmailJobs
 
 An explicit `AxonEnqueueOptions.ConcurrencyKey` always overrides the attribute when both are present.
 
+Shift a job's dispatch order with `Priority` — `Low`, `Medium` (the default), `High`, or `Critical`:
+
+```csharp
+var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.RotateSecurityKeys(),
+    new AxonEnqueueOptions { Priority = JobPriority.Critical });
+```
+
+This isn't a hard tier: jobs are dispatched in order of an effective score
+(`COALESCE(ScheduledFor, EnqueuedAt)` minus a fixed per-priority boost — `Low` 0, `Medium` 5 min,
+`High` 15 min, `Critical` 60 min), not by priority level alone. A `High` job created 1 minute ago
+dispatches before a `Low` job created 1 minute ago, but a `Low` job created 20 minutes ago still
+dispatches before that same 1-minute-old `High` job — priority only lets a job jump the queue by
+as much as its boost, so a sufficiently old lower-priority job always eventually wins. See
+[docs/architecture.md#job-priority](docs/architecture.md#job-priority) for the full scoring
+formula and per-backend implementation notes.
+
 Chain a job to run only after another one finishes with `ContinueWithAsync`:
 
 ```csharp

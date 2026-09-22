@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Axon.Core;
+using Axon.Core.Enums;
 using Axon.Core.Helpers;
 using Axon.Core.Models;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -188,6 +189,7 @@ internal class AxonClient : IAxonClient
             RetryPolicy = options?.RetryPolicy,
             ConcurrencyKey = concurrencyKey,
             MaxConcurrent = maxConcurrent,
+            Priority = options?.Priority ?? JobPriority.Medium,
         };
     }
 

@@ -28,6 +28,22 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
   docs/architecture.md#multi-instance-dispatch-safety for why, and for how its `ConcurrencyLocks`
   collection makes MongoDB's per-document write-conflict detection actually catch a race that
   would otherwise go undetected).
+- `Priority` on jobs (`JobPriority`: `Low`, `Medium` - the default, `High`, `Critical`), settable
+  via `AxonEnqueueOptions.Priority`. Every backend's `GetJobs` now orders by an effective
+  dispatch score (`COALESCE(ScheduledFor, EnqueuedAt) - Boost[Priority]`, see
+  `Axon.Core.Enums.JobPriorityBoost`) instead of raw `ScheduledFor` - a bounded virtual-age bonus
+  per priority level, not a hard tier: a `High` job only jumps ahead of an already-waiting `Low`
+  job by as much as the boost gap between them (15 min), so a sufficiently old `Low` job still
+  wins. See docs/architecture.md#job-priority for the full formula and the worked example.
+
+### Changed
+- Every job store now orders due jobs (and the dashboard's `/axon/jobs` listing) by
+  `COALESCE(ScheduledFor, EnqueuedAt)` instead of `ScheduledFor` alone. Previously, an immediate
+  ("run now") job's `ScheduledFor = NULL` sorted first in every backend's ascending order, so an
+  immediate job always dispatched before any scheduled-for-later job regardless of age - this was
+  an incidental side effect of the old sort, never a documented guarantee. Immediate jobs now
+  compete with scheduled jobs on the same timeline (adjusted by `Priority`) instead of
+  automatically jumping the whole queue. See docs/architecture.md#job-priority.
 
 ## [0.1.2] - 2026-09-20
 

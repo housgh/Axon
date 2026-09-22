@@ -1,3 +1,5 @@
+using Axon.Core.Enums;
+
 namespace Axon.Core.Models;
 
 /// <summary>
@@ -9,6 +11,12 @@ public class AxonEnqueueOptions
 {
     /// <summary>Overrides Axon.Server's default retry/backoff schedule for this job only. Null uses the default.</summary>
     public AxonRetryPolicy? RetryPolicy { get; set; }
+
+    /// <summary>
+    /// Shifts this job's effective dispatch order - see <see cref="JobPriorityBoost"/> for the
+    /// scoring formula. Defaults to <see cref="JobPriority.Medium"/>.
+    /// </summary>
+    public JobPriority Priority { get; set; } = JobPriority.Medium;
 
     /// <summary>
     /// Groups this job for the <see cref="MaxConcurrent"/> limit - e.g. "email-sender". An

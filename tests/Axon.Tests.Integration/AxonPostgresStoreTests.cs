@@ -132,6 +132,43 @@ public class AxonPostgresStoreTests(PostgresFixture fixture)
     }
 
     [Fact]
+    public async Task GetJobs_RecentHighPriorityJob_DispatchesBeforeRecentLowPriorityJob()
+    {
+        var sut = CreateSut();
+        var now = DateTime.UtcNow.Ticks;
+        var high = JobFactory.CreateJob(priority: JobPriority.High, enqueuedAt: now - TimeSpan.FromMinutes(1).Ticks);
+        var low = JobFactory.CreateJob(priority: JobPriority.Low, enqueuedAt: now - TimeSpan.FromMinutes(1).Ticks);
+        await sut.AddJob(low);
+        await sut.AddJob(high);
+
+        var result = await sut.GetJobs(take: 1000, states: [JobState.Enqueued]);
+
+        var indexOfHigh = result.FindIndex(j => j.JobId == high.JobId);
+        var indexOfLow = result.FindIndex(j => j.JobId == low.JobId);
+        indexOfHigh.Should().BeLessThan(indexOfLow, "a 1-minute-old High job should dispatch before a 1-minute-old Low job");
+    }
+
+    [Fact]
+    public async Task GetJobs_OldLowPriorityJob_StillDispatchesBeforeRecentHighPriorityJob()
+    {
+        // High's boost is 15 min, so a Low job needs to be more than 15 min older than the High
+        // job (not exactly 15 min - that's the exact tie point) to win on score; 20 min clears
+        // that margin comfortably.
+        var sut = CreateSut();
+        var now = DateTime.UtcNow.Ticks;
+        var recentHigh = JobFactory.CreateJob(priority: JobPriority.High, enqueuedAt: now - TimeSpan.FromMinutes(1).Ticks);
+        var oldLow = JobFactory.CreateJob(priority: JobPriority.Low, enqueuedAt: now - TimeSpan.FromMinutes(20).Ticks);
+        await sut.AddJob(recentHigh);
+        await sut.AddJob(oldLow);
+
+        var result = await sut.GetJobs(take: 1000, states: [JobState.Enqueued]);
+
+        var indexOfOldLow = result.FindIndex(j => j.JobId == oldLow.JobId);
+        var indexOfRecentHigh = result.FindIndex(j => j.JobId == recentHigh.JobId);
+        indexOfOldLow.Should().BeLessThan(indexOfRecentHigh, "a 20-minute-old Low job should still dispatch before a 1-minute-old High job");
+    }
+
+    [Fact]
     public async Task UpdateState_ChangesStateAndAppendsHistory()
     {
         var sut = CreateSut();

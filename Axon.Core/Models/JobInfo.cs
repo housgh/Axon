@@ -1,3 +1,5 @@
+using Axon.Core.Enums;
+
 namespace Axon.Core.Models;
 
 public class JobInfo
@@ -9,6 +11,14 @@ public class JobInfo
 
     /// <summary>Overrides Axon.Server's default retry behavior for this job. Null uses the default.</summary>
     public AxonRetryPolicy? RetryPolicy { get; set; }
+
+    /// <summary>
+    /// Shifts this job's effective dispatch order - see <see cref="JobPriorityBoost"/> for the
+    /// scoring formula. Not a hard tier: a higher-priority job only jumps ahead of an
+    /// already-waiting lower-priority job if the wait-time gap between them is smaller than the
+    /// boost gap between their priorities.
+    /// </summary>
+    public JobPriority Priority { get; set; } = JobPriority.Medium;
 
     /// <summary>
     /// Groups jobs for the <see cref="MaxConcurrent"/> limit - e.g. "email-sender". Null means no

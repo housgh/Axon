@@ -22,7 +22,8 @@ BEGIN
         MaxConcurrent     INT        NULL,
         ParentJobId       NVARCHAR(64) NULL,
         ContinueOnParentFailure BIT  NOT NULL DEFAULT 0,
-        IsDeleted         BIT        NOT NULL DEFAULT 0
+        IsDeleted         BIT        NOT NULL DEFAULT 0,
+        Priority          INT        NOT NULL DEFAULT 0
     );
 
     CREATE INDEX IX_Jobs_State_ScheduledFor ON Jobs (State, ScheduledFor) WHERE IsDeleted = 0;
@@ -87,6 +88,14 @@ END
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('Jobs') AND name = 'IX_Jobs_ParentJobId')
 BEGIN
     CREATE INDEX IX_Jobs_ParentJobId ON Jobs (ParentJobId) WHERE IsDeleted = 0 AND ParentJobId IS NOT NULL;
+END
+
+-- Shifts a job's effective dispatch order (see AxonSqlServerStore.GetJobs's ORDER BY and
+-- Axon.Core.Enums.JobPriorityBoost) without creating a hard tier - 0 = Medium, matching
+-- JobPriority's enum order, so existing rows (pre-dating this column) default to Medium.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Jobs') AND name = 'Priority')
+BEGIN
+    ALTER TABLE Jobs ADD Priority INT NOT NULL DEFAULT 0;
 END
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'JobHistory')

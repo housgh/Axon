@@ -17,7 +17,8 @@ internal static class JobFactory
         long enqueuedAt = 0,
         AxonRetryPolicy? retryPolicy = null,
         string? concurrencyKey = null,
-        int? maxConcurrent = null) =>
+        int? maxConcurrent = null,
+        JobPriority priority = JobPriority.Medium) =>
         new(new JobInfo
         {
             MethodName = "DoWork",
@@ -26,7 +27,8 @@ internal static class JobFactory
             Arguments = [],
             RetryPolicy = retryPolicy,
             ConcurrencyKey = concurrencyKey,
-            MaxConcurrent = maxConcurrent
+            MaxConcurrent = maxConcurrent,
+            Priority = priority
         })
         {
             JobId = jobId ?? Guid.NewGuid().ToString(),

@@ -41,6 +41,37 @@ public class InMemoryAxonJobStoreTests
     }
 
     [Fact]
+    public async Task GetJobs_RecentHighPriorityJob_DispatchesBeforeRecentLowPriorityJob()
+    {
+        var now = DateTime.UtcNow.Ticks;
+        await _sut.AddJob(JobFactory.CreateJob("low", state: JobState.Enqueued, priority: JobPriority.Low, enqueuedAt: now - TimeSpan.FromMinutes(1).Ticks));
+        await _sut.AddJob(JobFactory.CreateJob("high", state: JobState.Enqueued, priority: JobPriority.High, enqueuedAt: now - TimeSpan.FromMinutes(1).Ticks));
+
+        var result = await _sut.GetJobs(take: 20, states: [JobState.Enqueued]);
+
+        var indexOfHigh = result.FindIndex(j => j.JobId == "high");
+        var indexOfLow = result.FindIndex(j => j.JobId == "low");
+        indexOfHigh.Should().BeLessThan(indexOfLow, "a 1-minute-old High job should dispatch before a 1-minute-old Low job");
+    }
+
+    [Fact]
+    public async Task GetJobs_OldLowPriorityJob_StillDispatchesBeforeRecentHighPriorityJob()
+    {
+        // High's boost is 15 min, so a Low job needs to be more than 15 min older than the High
+        // job (not exactly 15 min - that's the exact tie point) to win on score; 20 min clears
+        // that margin comfortably.
+        var now = DateTime.UtcNow.Ticks;
+        await _sut.AddJob(JobFactory.CreateJob("recent-high", state: JobState.Enqueued, priority: JobPriority.High, enqueuedAt: now - TimeSpan.FromMinutes(1).Ticks));
+        await _sut.AddJob(JobFactory.CreateJob("old-low", state: JobState.Enqueued, priority: JobPriority.Low, enqueuedAt: now - TimeSpan.FromMinutes(20).Ticks));
+
+        var result = await _sut.GetJobs(take: 20, states: [JobState.Enqueued]);
+
+        var indexOfOldLow = result.FindIndex(j => j.JobId == "old-low");
+        var indexOfRecentHigh = result.FindIndex(j => j.JobId == "recent-high");
+        indexOfOldLow.Should().BeLessThan(indexOfRecentHigh, "a 20-minute-old Low job should still dispatch before a 1-minute-old High job");
+    }
+
+    [Fact]
     public async Task TryClaimJob_WhenEnqueued_ClaimsAndSetsDeadline()
     {
         await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));

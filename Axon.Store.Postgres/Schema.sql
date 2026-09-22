@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS "Jobs"
     "MaxConcurrent"          INT     NULL,
     "ParentJobId"            VARCHAR(64) NULL,
     "ContinueOnParentFailure" BOOLEAN NOT NULL DEFAULT FALSE,
-    "IsDeleted"              BOOLEAN NOT NULL DEFAULT FALSE
+    "IsDeleted"              BOOLEAN NOT NULL DEFAULT FALSE,
+    "Priority"               INT     NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS "IX_Jobs_State_ScheduledFor" ON "Jobs" ("State", "ScheduledFor") WHERE "IsDeleted" = FALSE;
