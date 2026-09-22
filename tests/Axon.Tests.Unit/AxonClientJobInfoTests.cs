@@ -80,4 +80,24 @@ public class AxonClientJobInfoTests
 
         jobInfo!.Priority.Should().Be(JobPriority.Critical);
     }
+
+    [Fact]
+    public void GetJobInfo_NoOptions_DefaultsQueueNameToDefault()
+    {
+        Expression<Action<TestJobs>> call = x => x.PlainMethod();
+
+        var jobInfo = AxonClient.GetJobInfo(call, options: null);
+
+        jobInfo!.QueueName.Should().Be("default");
+    }
+
+    [Fact]
+    public void GetJobInfo_ExplicitQueueName_UsesExplicitQueueName()
+    {
+        Expression<Action<TestJobs>> call = x => x.PlainMethod();
+
+        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { QueueName = "billing" });
+
+        jobInfo!.QueueName.Should().Be("billing");
+    }
 }

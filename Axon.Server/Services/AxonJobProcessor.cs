@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Axon.Core.Enums;
 using Axon.Core.Models;
+using Axon.Server.DependencyInjection;
 using Axon.Server.Hubs;
 using Axon.Server.Interfaces;
 using Microsoft.AspNetCore.SignalR;
@@ -15,7 +16,8 @@ public class AxonJobProcessor(
     IAxonJobService jobService,
     IDeviceConnectionRegistry deviceRegistry,
     IAxonDashboardNotifier notifier,
-    ILogger<AxonJobProcessor> logger) : BackgroundService
+    ILogger<AxonJobProcessor> logger,
+    AxonServerFeatures? features = null) : BackgroundService
 {
     private const int PollInterval = 5000;
 
@@ -71,6 +73,13 @@ public class AxonJobProcessor(
 
         foreach (var job in jobsToRun)
         {
+            if (features is not null && !features.ServedQueues.Contains(job.QueueName))
+            {
+                // This instance doesn't serve this job's queue; leave it for another instance
+                // (or a future poll, once this instance's queue configuration changes).
+                continue;
+            }
+
             var connectionId = await deviceRegistry.GetConnectionId(job.DeviceName);
             if (connectionId is null)
             {
@@ -146,6 +155,7 @@ public class Job : JobInfo
         ConcurrencyKey = jobInfo.ConcurrencyKey;
         MaxConcurrent = jobInfo.MaxConcurrent;
         Priority = jobInfo.Priority;
+        QueueName = jobInfo.QueueName;
     }
     public string DeviceName { get; set; } = null!;
     public string JobId { get; set; } = null!;

@@ -19,6 +19,13 @@ public class AxonEnqueueOptions
     public JobPriority Priority { get; set; } = JobPriority.Medium;
 
     /// <summary>
+    /// The named queue to dispatch this job through - see <c>AxonServerBuilder.AddQueues</c>.
+    /// Null (the default) resolves to <c>"default"</c>, which every <c>Axon.Server</c> instance
+    /// serves even if it never called <c>AddQueues</c>.
+    /// </summary>
+    public string? QueueName { get; set; }
+
+    /// <summary>
     /// Groups this job for the <see cref="MaxConcurrent"/> limit - e.g. "email-sender". An
     /// explicit value here always overrides an <c>AxonConcurrencyLimitAttribute</c> on the
     /// method, if both are present. Null (the default) falls back to that attribute, if any.

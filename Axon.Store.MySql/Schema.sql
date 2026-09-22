@@ -63,10 +63,11 @@ CREATE TABLE IF NOT EXISTS `RecurringJobs`
 
 CREATE TABLE IF NOT EXISTS `ServerInstances`
 (
-    `InstanceId`  VARCHAR(64)  NOT NULL PRIMARY KEY,
-    `MachineName` VARCHAR(256) NOT NULL,
-    `StartedAt`   BIGINT       NOT NULL,
-    `LastSeenAt`  BIGINT       NOT NULL,
+    `InstanceId`   VARCHAR(64)   NOT NULL PRIMARY KEY,
+    `MachineName`  VARCHAR(256)  NOT NULL,
+    `StartedAt`    BIGINT        NOT NULL,
+    `LastSeenAt`   BIGINT        NOT NULL,
+    `ServedQueues` VARCHAR(1024) NOT NULL DEFAULT 'default',
 
     INDEX `IX_ServerInstances_LastSeenAt` (`LastSeenAt`)
 );

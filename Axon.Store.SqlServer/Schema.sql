@@ -143,13 +143,21 @@ IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ServerInstances')
 BEGIN
     CREATE TABLE ServerInstances
     (
-        InstanceId  NVARCHAR(64)  NOT NULL PRIMARY KEY,
-        MachineName NVARCHAR(256) NOT NULL,
-        StartedAt   BIGINT        NOT NULL,
-        LastSeenAt  BIGINT        NOT NULL
+        InstanceId   NVARCHAR(64)   NOT NULL PRIMARY KEY,
+        MachineName  NVARCHAR(256)  NOT NULL,
+        StartedAt    BIGINT         NOT NULL,
+        LastSeenAt   BIGINT         NOT NULL,
+        ServedQueues NVARCHAR(1024) NOT NULL DEFAULT 'default'
     );
 
     CREATE INDEX IX_ServerInstances_LastSeenAt ON ServerInstances (LastSeenAt);
+END
+
+-- Comma-joined list of queues this instance serves (see AxonServerBuilder.AddQueues), refreshed
+-- on every heartbeat so a restart with a different AddQueues call doesn't leave a stale value.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ServerInstances') AND name = 'ServedQueues')
+BEGIN
+    ALTER TABLE ServerInstances ADD ServedQueues NVARCHAR(1024) NOT NULL DEFAULT 'default';
 END
 
 -- Published device connections, so the dashboard's Clients tab reflects the whole fleet rather

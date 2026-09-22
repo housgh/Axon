@@ -525,6 +525,7 @@
           '<dt>State</dt><dd><span class="badge ' + STATE_CLASSES[job.state] + '">' + STATE_NAMES[job.state] + '</span></dd>' +
           '<dt>Priority</dt><dd><span class="badge ' + PRIORITY_CLASSES[job.priority || 0] + '">' + PRIORITY_NAMES[job.priority || 0] + '</span></dd>' +
           '<dt>Device</dt><dd class="mono">' + escapeHtml(job.deviceName) + '</dd>' +
+          '<dt>Queue</dt><dd><span class="badge scheduled">' + escapeHtml(job.queueName || 'default') + '</span></dd>' +
           '<dt>Attempts</dt><dd>' + job.attempts + ' / ' + job.maxAttempts + '</dd>' +
           '<dt>Scheduled for</dt><dd>' + (job.scheduledFor ? fmtDate(job.scheduledFor) + ' (' + relativeTime(job.scheduledFor) + ')' : '—') + '</dd>' +
           '<dt>Assembly</dt><dd class="mono">' + escapeHtml(job.assembly) + '</dd>' +

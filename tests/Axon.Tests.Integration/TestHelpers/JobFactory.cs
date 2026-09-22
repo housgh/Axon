@@ -19,7 +19,8 @@ internal static class JobFactory
         string? parentJobId = null,
         bool continueOnParentFailure = false,
         JobPriority priority = JobPriority.Medium,
-        long? enqueuedAt = null) =>
+        long? enqueuedAt = null,
+        string queueName = "default") =>
         new(new JobInfo
         {
             MethodName = "DoWork",
@@ -29,7 +30,8 @@ internal static class JobFactory
             RetryPolicy = retryPolicy,
             ConcurrencyKey = concurrencyKey,
             MaxConcurrent = maxConcurrent,
-            Priority = priority
+            Priority = priority,
+            QueueName = queueName
         })
         {
             JobId = jobId ?? Guid.NewGuid().ToString(),

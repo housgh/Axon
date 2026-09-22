@@ -21,6 +21,15 @@ public class JobInfo
     public JobPriority Priority { get; set; } = JobPriority.Medium;
 
     /// <summary>
+    /// The named queue this job is dispatched through. An <c>Axon.Server</c> instance only
+    /// claims/dispatches jobs on queues it was registered for (see
+    /// <c>AxonServerBuilder.AddQueues</c>) - a job on a queue no live instance serves simply sits
+    /// waiting until one does. Defaults to <c>"default"</c>, which every instance serves
+    /// implicitly even if <c>AddQueues</c> was never called.
+    /// </summary>
+    public string QueueName { get; set; } = "default";
+
+    /// <summary>
     /// Groups jobs for the <see cref="MaxConcurrent"/> limit - e.g. "email-sender". Null means no
     /// concurrency limit is enforced for this job, regardless of <see cref="MaxConcurrent"/>.
     /// </summary>

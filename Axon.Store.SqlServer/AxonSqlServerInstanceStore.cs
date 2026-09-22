@@ -19,16 +19,17 @@ public class AxonSqlServerInstanceStore(string connectionString) : IAxonServerIn
             USING (SELECT @InstanceId AS InstanceId) AS source
             ON target.InstanceId = source.InstanceId
             WHEN MATCHED THEN
-                UPDATE SET LastSeenAt = @LastSeenAt
+                UPDATE SET LastSeenAt = @LastSeenAt, ServedQueues = @ServedQueues
             WHEN NOT MATCHED THEN
-                INSERT (InstanceId, MachineName, StartedAt, LastSeenAt)
-                VALUES (@InstanceId, @MachineName, @StartedAt, @LastSeenAt);";
+                INSERT (InstanceId, MachineName, StartedAt, LastSeenAt, ServedQueues)
+                VALUES (@InstanceId, @MachineName, @StartedAt, @LastSeenAt, @ServedQueues);";
         await conn.ExecuteAsync(sql, new
         {
             instance.InstanceId,
             instance.MachineName,
             instance.StartedAt,
-            instance.LastSeenAt
+            instance.LastSeenAt,
+            instance.ServedQueues
         });
     });
 

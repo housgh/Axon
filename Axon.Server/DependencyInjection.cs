@@ -129,6 +129,24 @@ public static class DependencyInjection
         return builder;
     }
 
+    /// <summary>
+    /// Restricts this <c>Axon.Server</c> instance to only claim/dispatch jobs on the given
+    /// queues, plus <c>"default"</c> which every instance serves implicitly (even one that never
+    /// calls <c>AddQueues</c> at all) - so this always adds to what's served, never replaces the
+    /// default with an exclusive allowlist. A job on a queue no live instance serves simply sits
+    /// waiting (same as a job whose target device is offline) rather than failing - see
+    /// docs/architecture.md#job-queues.
+    /// </summary>
+    public static AxonServerBuilder AddQueues(this AxonServerBuilder builder, params string[] queueNames)
+    {
+        if (queueNames.Length == 0 || queueNames.Any(string.IsNullOrWhiteSpace))
+            throw new ArgumentException("At least one non-empty queue name must be provided.", nameof(queueNames));
+
+        var servedQueues = new HashSet<string>(queueNames) { "default" };
+        builder.Features.ServedQueues = servedQueues;
+        return builder;
+    }
+
     public static AxonServerBuilder AddAuthentication(this AxonServerBuilder builder, Action<DashboardAuthOptions> configureAuth)
     {
         var services = builder.Services;
@@ -407,6 +425,7 @@ public static class DependencyInjection
                         i.MachineName,
                         i.StartedAt,
                         i.LastSeenAt,
+                        i.ServedQueues,
                         IsOnline = now - i.LastSeenAt <= ServerInstanceOfflineTimeout.Ticks
                     }));
             });
@@ -523,6 +542,12 @@ public class AxonServerFeatures
 {
     public bool ApiEnabled { get; set; }
     public bool DashboardEnabled { get; set; }
+
+    /// <summary>
+    /// Queues this instance claims/dispatches jobs from - see <c>AxonServerBuilder.AddQueues</c>.
+    /// Defaults to just <c>"default"</c> for an instance that never calls <c>AddQueues</c>.
+    /// </summary>
+    public IReadOnlySet<string> ServedQueues { get; set; } = new HashSet<string> { "default" };
 }
 
 public class AxonServerBuilder

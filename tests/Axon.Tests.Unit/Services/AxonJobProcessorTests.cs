@@ -1,5 +1,6 @@
 using System.Diagnostics.Metrics;
 using Axon.Core.Enums;
+using Axon.Server.DependencyInjection;
 using Axon.Server.Hubs;
 using Axon.Server.Interfaces;
 using Axon.Server.Services;
@@ -36,14 +37,16 @@ public class AxonJobProcessorTests
             Substitute.For<ILogger<AxonJobProcessor>>());
     }
 
-    private Task DispatchDueJobsAsync(CancellationToken ct = default)
+    private Task DispatchDueJobsAsync(CancellationToken ct = default) => DispatchDueJobsAsync(_sut, ct);
+
+    private static Task DispatchDueJobsAsync(AxonJobProcessor processor, CancellationToken ct = default)
     {
         // DispatchDueJobsAsync is private; invoked via reflection so the test exercises the
         // actual poll-cycle dispatch logic (claim-then-send ordering, connectivity check) rather
         // than reimplementing it.
         var method = typeof(AxonJobProcessor).GetMethod("DispatchDueJobsAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        return (Task)method.Invoke(_sut, [ct])!;
+        return (Task)method.Invoke(processor, [ct])!;
     }
 
     [Fact]
@@ -58,6 +61,42 @@ public class AxonJobProcessorTests
         job!.State.Should().Be(JobState.Processing);
         await _clientProxy.Received(1).SendCoreAsync("Invoke", Arg.Is<object?[]>(a => (string)a[0]! == "job-1"), Arg.Any<CancellationToken>());
         await _notifier.Received(1).JobsChanged();
+    }
+
+    [Fact]
+    public async Task DispatchDueJobsAsync_JobOnUnservedQueue_NeverDispatches()
+    {
+        // The device is connected (so the existing connectivity check alone wouldn't skip it) -
+        // only the queue guard should stop this dispatch.
+        var sut = new AxonJobProcessor(
+            _hubContext, _jobStore, _jobService, _deviceRegistry, _notifier,
+            Substitute.For<ILogger<AxonJobProcessor>>(),
+            new AxonServerFeatures { ServedQueues = new HashSet<string> { "default" } });
+        await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued, queueName: "billing"));
+        await _deviceRegistry.Register("device-1", "conn-1");
+
+        await DispatchDueJobsAsync(sut);
+
+        var job = await _jobStore.GetJob("job-1");
+        job!.State.Should().Be(JobState.Enqueued);
+        await _clientProxy.DidNotReceive().SendCoreAsync(Arg.Any<string>(), Arg.Any<object?[]>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task DispatchDueJobsAsync_JobOnServedQueue_DispatchesNormally()
+    {
+        var sut = new AxonJobProcessor(
+            _hubContext, _jobStore, _jobService, _deviceRegistry, _notifier,
+            Substitute.For<ILogger<AxonJobProcessor>>(),
+            new AxonServerFeatures { ServedQueues = new HashSet<string> { "default", "billing" } });
+        await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued, queueName: "billing"));
+        await _deviceRegistry.Register("device-1", "conn-1");
+
+        await DispatchDueJobsAsync(sut);
+
+        var job = await _jobStore.GetJob("job-1");
+        job!.State.Should().Be(JobState.Processing);
+        await _clientProxy.Received(1).SendCoreAsync("Invoke", Arg.Is<object?[]>(a => (string)a[0]! == "job-1"), Arg.Any<CancellationToken>());
     }
 
     [Fact]

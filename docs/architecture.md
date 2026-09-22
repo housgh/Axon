@@ -101,6 +101,25 @@ Worked example: a `High` job enqueued 1 minute ago has `score = -1min - 15min = 
 
 **MongoDB** (`AxonMongoStore.GetJobs`) is the one backend that can't express the score via a simple `ORDER BY`: `Priority` and `EffectiveScore` are computed per-document in an aggregation pipeline (`$addFields` with a `$switch` on `Priority`, mirroring the `$lookup`/`$addFields` pattern `DeleteCompletedJobsOlderThan` already uses), then `$sort`/`$skip`/`$limit`/`$unset` on that computed field - the C# driver's fluent `SortBy` can't reference a computed expression against a raw `BsonDocument`.
 
+## Job queues
+
+Every job carries a `QueueName` (default `"default"`), and every `Axon.Server` instance declares which queues it serves via `.AddQueues(...)` chained off `AddAxonServer()` (`Axon.Server/DependencyInjection.cs`'s `AddQueues` extension on `AxonServerBuilder`, following the same chaining shape as `Axon.Server.Redis`'s `AddRedisBackplane`). `.AddQueues(...)` always adds `"default"` to whatever's passed - it's never an exclusive allowlist, so an instance that opts into a custom queue doesn't stop serving ordinary unqueued jobs. An instance that never calls `.AddQueues(...)` serves only `"default"`, unchanged from before this feature existed.
+
+Unlike `Priority` (a per-backend `ORDER BY`/aggregation change) and `ConcurrencyKey` (a per-backend locking primitive - see "Multi-instance dispatch safety" above), queue filtering is a **pure in-process routing decision**, not a store-level concern at all: `AxonJobProcessor.DispatchDueJobsAsync`'s poll-cycle loop gained one guard clause, checked before the existing device-connectivity check:
+
+```csharp
+if (!features.ServedQueues.Contains(job.QueueName))
+{
+    continue; // this instance doesn't serve this queue - leave for another instance/poll
+}
+```
+
+`features` is the same `AxonServerFeatures` singleton that already holds `ApiEnabled`/`DashboardEnabled`, now also holding `ServedQueues`. No store's `GetJobs` query changed for this - it still fetches every due job system-wide, exactly as it always has for the device-connectivity check; queue filtering is just a second guard alongside that one, evaluated entirely in memory.
+
+A job on a queue no live instance serves behaves exactly like a job whose target device is offline: it stays `Enqueued`/`Scheduled` and is retried every poll cycle (5s) until some instance's configuration serves it - it never fails, times out, or moves to any error state on its own. This is visible via the dashboard's Jobs table (each job's `Queue` column) and the Servers tab (each instance's `Queues` column, sourced from `ServerInstance.ServedQueues` - a comma-joined string, heartbeated fleet-wide every 15s alongside `MachineName`/`LastSeenAt`, same mechanism and same per-backend `ServerInstances` schema/upsert pattern used for every other instance field).
+
+**Known gap, not introduced by this feature:** `RecurringJob(JobInfo)` (`Axon.Server/Services/RecurringJob.cs`) only copies `Arguments`/`MethodName`/`Assembly`/`DeclaringType` from `JobInfo` when a recurring job is created - it already silently drops `Priority`/`ConcurrencyKey`/`MaxConcurrent` today, and `QueueName` has the exact same gap. A job triggered from a recurring schedule always runs on `"default"` regardless of what queue the recurring job's `JobInfo` specified, until this pre-existing constructor gap is fixed separately.
+
 ## Job state machine
 
 ```mermaid

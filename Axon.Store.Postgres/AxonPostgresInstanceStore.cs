@@ -14,15 +14,16 @@ public class AxonPostgresInstanceStore(string connectionString) : IAxonServerIns
     {
         await using var conn = CreateConnection();
         const string sql = @"
-            INSERT INTO ""ServerInstances"" (""InstanceId"", ""MachineName"", ""StartedAt"", ""LastSeenAt"")
-            VALUES (@InstanceId, @MachineName, @StartedAt, @LastSeenAt)
-            ON CONFLICT (""InstanceId"") DO UPDATE SET ""LastSeenAt"" = @LastSeenAt";
+            INSERT INTO ""ServerInstances"" (""InstanceId"", ""MachineName"", ""StartedAt"", ""LastSeenAt"", ""ServedQueues"")
+            VALUES (@InstanceId, @MachineName, @StartedAt, @LastSeenAt, @ServedQueues)
+            ON CONFLICT (""InstanceId"") DO UPDATE SET ""LastSeenAt"" = @LastSeenAt, ""ServedQueues"" = @ServedQueues";
         await conn.ExecuteAsync(sql, new
         {
             instance.InstanceId,
             instance.MachineName,
             instance.StartedAt,
-            instance.LastSeenAt
+            instance.LastSeenAt,
+            instance.ServedQueues
         });
     });
 

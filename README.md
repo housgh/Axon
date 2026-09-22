@@ -305,6 +305,33 @@ minutes ago still dispatches before that same 1-minute-old `High` job — 20 rea
 15-minute boost. See [docs/architecture.md#job-priority](docs/architecture.md#job-priority) for
 the full scoring formula, the max-headstart table, and per-backend implementation notes.
 
+### Queues
+
+Route a job through a named queue instead of the implicit `"default"` one:
+
+```csharp
+var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.ChargeInvoice(...),
+    new AxonEnqueueOptions { QueueName = "billing" });
+```
+
+An `Axon.Server` instance only claims/dispatches jobs on queues it was registered for, via
+`.AddQueues(...)` chained off `AddAxonServer()`:
+
+```csharp
+builder.Services.AddAxonServer()
+    .AddAxonDashboard()
+    .AddQueues("billing"); // this instance serves "billing" AND "default"
+```
+
+`.AddQueues(...)` always adds `"default"` alongside whatever you pass — it's never an exclusive
+allowlist, so calling `.AddQueues("billing")` doesn't stop an instance from also running ordinary
+unqueued jobs. An instance that never calls `.AddQueues(...)` at all still serves `"default"`
+(today's behavior, unchanged). A job on a queue no live instance serves simply sits waiting —
+same as a job whose target device is offline — until an instance that serves it comes online; the
+dashboard's Jobs table shows each job's queue, and the Servers tab shows which queues each
+instance serves. See [docs/architecture.md#job-queues](docs/architecture.md#job-queues) for
+details.
+
 Chain a job to run only after another one finishes with `ContinueWithAsync`:
 
 ```csharp

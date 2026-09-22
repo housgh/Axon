@@ -190,6 +190,7 @@ internal class AxonClient : IAxonClient
             ConcurrencyKey = concurrencyKey,
             MaxConcurrent = maxConcurrent,
             Priority = options?.Priority ?? JobPriority.Medium,
+            QueueName = options?.QueueName ?? "default",
         };
     }
 

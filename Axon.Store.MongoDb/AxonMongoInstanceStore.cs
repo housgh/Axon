@@ -16,7 +16,8 @@ public class AxonMongoInstanceStore(string connectionString, string databaseName
         InstanceId = doc["_id"].AsString,
         MachineName = doc["MachineName"].AsString,
         StartedAt = doc["StartedAt"].ToInt64(),
-        LastSeenAt = doc["LastSeenAt"].ToInt64()
+        LastSeenAt = doc["LastSeenAt"].ToInt64(),
+        ServedQueues = doc.Contains("ServedQueues") ? doc["ServedQueues"].AsString : "default"
     };
 
     public Task Heartbeat(ServerInstance instance) => MongoExceptionTranslator.Run(connectionString, async () =>
@@ -24,6 +25,7 @@ public class AxonMongoInstanceStore(string connectionString, string databaseName
         var filter = Builders<BsonDocument>.Filter.Eq("_id", instance.InstanceId);
         var update = Builders<BsonDocument>.Update
             .Set("LastSeenAt", instance.LastSeenAt)
+            .Set("ServedQueues", instance.ServedQueues)
             .SetOnInsert("MachineName", instance.MachineName)
             .SetOnInsert("StartedAt", instance.StartedAt);
         await ServerInstances.UpdateOneAsync(filter, update, new UpdateOptions { IsUpsert = true });

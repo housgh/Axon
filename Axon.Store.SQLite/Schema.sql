@@ -59,10 +59,11 @@ CREATE INDEX IF NOT EXISTS "IX_RecurringJobs_NextRunAt" ON "RecurringJobs" ("Nex
 
 CREATE TABLE IF NOT EXISTS "ServerInstances"
 (
-    "InstanceId"  TEXT    NOT NULL PRIMARY KEY,
-    "MachineName" TEXT    NOT NULL,
-    "StartedAt"   INTEGER NOT NULL,
-    "LastSeenAt"  INTEGER NOT NULL
+    "InstanceId"   TEXT    NOT NULL PRIMARY KEY,
+    "MachineName"  TEXT    NOT NULL,
+    "StartedAt"    INTEGER NOT NULL,
+    "LastSeenAt"   INTEGER NOT NULL,
+    "ServedQueues" TEXT    NOT NULL DEFAULT 'default'
 );
 
 CREATE INDEX IF NOT EXISTS "IX_ServerInstances_LastSeenAt" ON "ServerInstances" ("LastSeenAt");

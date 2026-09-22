@@ -35,6 +35,18 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
   per priority level, not a hard tier: a `High` job only jumps ahead of an already-waiting `Low`
   job by as much as the boost gap between them (15 min), so a sufficiently old `Low` job still
   wins. See docs/architecture.md#job-priority for the full formula and the worked example.
+- Named job queues: jobs carry a `QueueName` (`AxonEnqueueOptions.QueueName`, defaults to
+  `"default"`), and an `Axon.Server` instance only claims/dispatches jobs on queues it registers
+  via the new `AddQueues(...)` builder call chained off `AddAxonServer()` - e.g.
+  `AddAxonServer().AddAxonDashboard().AddQueues("billing")`. `AddQueues(...)` always adds
+  `"default"` alongside whatever's passed, so it's never an exclusive allowlist; an instance that
+  never calls it still serves `"default"`, unchanged from before. A job on a queue no live
+  instance serves simply sits waiting, same as a job whose target device is offline. Purely an
+  in-process routing decision in `AxonJobProcessor` - no store schema or locking changes, unlike
+  `Priority`/`ConcurrencyKey` (see docs/architecture.md#job-queues). Server instances now also
+  report which queues they serve (`ServerInstance.ServedQueues`, heartbeated fleet-wide like
+  `MachineName`), visible on the dashboard's Servers tab; the Jobs table/detail view show each
+  job's queue.
 
 ### Changed
 - Every job store now orders due jobs (and the dashboard's `/axon/jobs` listing) by

@@ -594,6 +594,7 @@
             <tr>
               <th>Job</th>
               <th>Device</th>
+              <th>Queue</th>
               <th>State</th>
               <th>Priority</th>
               <th>Attempts</th>
@@ -660,6 +661,7 @@
               <th>Status</th>
               <th>Machine</th>
               <th>Instance</th>
+              <th>Queues</th>
               <th>Started</th>
               <th>Last seen</th>
             </tr>
@@ -943,6 +945,7 @@
         '<div class="job-args mono" title="' + escapeHtml(fmtArgs(job.arguments)) + '">' + escapeHtml(fmtArgs(job.arguments)) + '</div>' +
       '</td>' +
       '<td><span class="device-name" title="' + escapeHtml(job.deviceName) + '">' + escapeHtml(shortDevice(job.deviceName)) + '</span></td>' +
+      '<td><span class="badge scheduled">' + escapeHtml(job.queueName || 'default') + '</span></td>' +
       '<td><span class="badge ' + STATE_CLASSES[stateIdx] + '">' + STATE_NAMES[stateIdx] + '</span></td>' +
       '<td><span class="badge ' + PRIORITY_CLASSES[priorityIdx] + '">' + PRIORITY_NAMES[priorityIdx] + '</span></td>' +
       '<td class="mono">' + attemptsCell + '</td>' +
@@ -1184,10 +1187,15 @@
 
   function renderServerRow(server) {
     const tr = document.createElement('tr');
+    const queues = (server.servedQueues || 'default').split(',').filter(Boolean);
+    const queuesCell = queues
+      .map(function (q) { return '<span class="badge scheduled">' + escapeHtml(q) + '</span>'; })
+      .join(' ');
     tr.innerHTML =
       '<td><span class="badge ' + (server.isOnline ? 'succeeded' : 'failed') + '">' + (server.isOnline ? 'Online' : 'Offline') + '</span></td>' +
       '<td>' + escapeHtml(server.machineName) + '</td>' +
       '<td class="mono" title="' + escapeHtml(server.instanceId) + '">' + escapeHtml(server.instanceId.slice(0, 8)) + '</td>' +
+      '<td>' + queuesCell + '</td>' +
       '<td><span title="' + fmtDate(server.startedAt) + '">' + relativeTime(server.startedAt) + '</span></td>' +
       '<td><span title="' + fmtDate(server.lastSeenAt) + '">' + relativeTime(server.lastSeenAt) + '</span></td>';
     return tr;

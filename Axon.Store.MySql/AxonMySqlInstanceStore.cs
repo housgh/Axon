@@ -14,15 +14,16 @@ public class AxonMySqlInstanceStore(string connectionString) : IAxonServerInstan
     {
         await using var conn = CreateConnection();
         const string sql = @"
-            INSERT INTO `ServerInstances` (`InstanceId`, `MachineName`, `StartedAt`, `LastSeenAt`)
-            VALUES (@InstanceId, @MachineName, @StartedAt, @LastSeenAt)
-            ON DUPLICATE KEY UPDATE `LastSeenAt` = @LastSeenAt";
+            INSERT INTO `ServerInstances` (`InstanceId`, `MachineName`, `StartedAt`, `LastSeenAt`, `ServedQueues`)
+            VALUES (@InstanceId, @MachineName, @StartedAt, @LastSeenAt, @ServedQueues)
+            ON DUPLICATE KEY UPDATE `LastSeenAt` = @LastSeenAt, `ServedQueues` = @ServedQueues";
         await conn.ExecuteAsync(sql, new
         {
             instance.InstanceId,
             instance.MachineName,
             instance.StartedAt,
-            instance.LastSeenAt
+            instance.LastSeenAt,
+            instance.ServedQueues
         });
     });
 
