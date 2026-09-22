@@ -290,14 +290,20 @@ var jobId = await axonClient.EnqueueAsync<MyClass>(x => x.RotateSecurityKeys(),
     new AxonEnqueueOptions { Priority = JobPriority.Critical });
 ```
 
-This isn't a hard tier: jobs are dispatched in order of an effective score
-(`COALESCE(ScheduledFor, EnqueuedAt)` minus a fixed per-priority boost — `Low` 0, `Medium` 5 min,
-`High` 15 min, `Critical` 60 min), not by priority level alone. A `High` job created 1 minute ago
-dispatches before a `Low` job created 1 minute ago, but a `Low` job created 20 minutes ago still
-dispatches before that same 1-minute-old `High` job — priority only lets a job jump the queue by
-as much as its boost, so a sufficiently old lower-priority job always eventually wins. See
-[docs/architecture.md#job-priority](docs/architecture.md#job-priority) for the full scoring
-formula and per-backend implementation notes.
+This isn't a hard tier — a flood of `High` jobs can't starve a `Low` job forever. Each priority
+level gets a fixed "boost", a free head start (in minutes of virtual age) applied when jobs are
+sorted for dispatch: `Low` gets none, `Medium` gets 5 min, `High` gets 15 min, `Critical` gets 60
+min. A job's real age plus its boost decides dispatch order, so a `High` job only cuts ahead of
+an already-waiting `Low` job by up to 15 minutes — a `Low` job that's been waiting longer than
+that still goes first. If nothing else is competing for a dispatch slot, priority makes no
+difference at all — the boost only matters when jobs are actually contending; a lone `Low` job
+still dispatches on the very next poll.
+
+Worked example: a `High` job created 1 minute ago dispatches before a `Low` job created 1 minute
+ago (High's 15-minute boost outweighs the tiny age difference), but a `Low` job created 20
+minutes ago still dispatches before that same 1-minute-old `High` job — 20 real minutes beats a
+15-minute boost. See [docs/architecture.md#job-priority](docs/architecture.md#job-priority) for
+the full scoring formula, the max-headstart table, and per-backend implementation notes.
 
 Chain a job to run only after another one finishes with `ContinueWithAsync`:
 

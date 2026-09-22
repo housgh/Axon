@@ -53,7 +53,30 @@ The `ConcurrencyKey`/`MaxConcurrent` limit (see the README's concurrency-limit s
 
 ## Job priority
 
-Every job carries a `Priority` (`JobPriority`: `Low`, `Medium` - the default, `High`, `Critical`), and every backend's `GetJobs` - the query `AxonJobProcessor.DispatchDueJobsAsync` uses to pick candidates, and the same one the dashboard's `/axon/jobs` listing uses - orders by an **effective dispatch score** instead of raw `ScheduledFor`:
+Every job carries a `Priority` (`JobPriority`: `Low`, `Medium` - the default, `High`, `Critical`), and every backend's `GetJobs` - the query `AxonJobProcessor.DispatchDueJobsAsync` uses to pick candidates, and the same one the dashboard's `/axon/jobs` listing uses - orders by an **effective dispatch score** instead of raw `ScheduledFor`.
+
+### The intuition: boost is free virtual age
+
+Think of "boost" as fake extra waiting time handed to a job based on its priority - it makes the job *look* older than it actually is when the scheduler decides what to run next. Jobs dispatch in order of who *looks* oldest (lowest score), not who's *actually* oldest.
+
+- `Low`: boost = 0 - no free head start; the job's score is just its real enqueue time.
+- `Medium`: boost = 5 min - looks 5 minutes older than it really is.
+- `High`: boost = 15 min - looks 15 minutes older.
+- `Critical`: boost = 60 min - looks 60 minutes older.
+
+Example: the clock reads 12:00:00. Job A (`Low`) and Job B (`High`) are both enqueued at that exact instant.
+- Job A's score: `12:00:00 - 0 = 12:00:00`
+- Job B's score: `12:00:00 - 15min = 11:45:00`
+
+Job B's score is earlier, so it dispatches first - its `High` priority faked 15 minutes of extra age onto it, even though both jobs are equally new. But if Job A had actually been sitting in the queue since 11:30:00 (30 real minutes) by the time Job B shows up at 12:00:00:
+- Job A's score: `11:30:00 - 0 = 11:30:00`
+- Job B's score: `12:00:00 - 15min = 11:45:00`
+
+Now Job A's score is earlier, so Job A dispatches first - its 30 minutes of *real* waiting beat Job B's 15-minute *fake* boost. This is the whole mechanism: boost is a flat, capped amount of pretend age, enough to let urgent work cut in front of stuff that just arrived, but never enough to cut in front of something that's been genuinely waiting longer than the boost amount.
+
+**This only matters when jobs are actually competing for a dispatch slot.** If a `Low` job is the only thing in the queue, it dispatches on the very next poll cycle regardless of its boost - priority never delays a job on its own, it only affects the job's position relative to others when there's contention. A `Low` job also isn't at risk of being starved forever by a flood of `High` jobs: each `High` job's score only depends on its *own* enqueue time, not on how many other `High` jobs exist, so a `Low` job that's been waiting longer than 15 minutes can no longer be jumped by *any* `High` job, no matter how many keep arriving - only jobs younger than that 15-minute window can still cut ahead of it.
+
+### The formula
 
 ```
 score = COALESCE(ScheduledFor, EnqueuedAt) - Boost[Priority]
@@ -61,14 +84,16 @@ score = COALESCE(ScheduledFor, EnqueuedAt) - Boost[Priority]
 
 (ascending; a lower score dispatches sooner.) `Boost` is a fixed per-priority tick offset, defined once in `Axon.Core.Enums.JobPriorityBoost` and duplicated as literal values in every backend's query text (SQL/BSON can't reference a .NET dictionary directly, so these must be kept in sync by hand if the boost values ever change):
 
-| Priority | Boost |
-|---|---|
-| `Low` | 0 |
-| `Medium` | 5 min |
-| `High` | 15 min |
-| `Critical` | 60 min |
+| Priority | Boost | Max headstart over a `Low` job |
+|---|---|---|
+| `Low` | 0 | - |
+| `Medium` | 5 min | 5 min |
+| `High` | 15 min | 15 min |
+| `Critical` | 60 min | 60 min |
 
-This is a bounded virtual-age bonus, not a hard tier: a `High` job jumps ahead of an already-waiting `Low` job only by as much as the boost gap between them (15 min here), so a `Low` job that's been waiting longer than that gap still wins. Worked example: a `High` job enqueued 1 minute ago has `score = -1min - 15min = -16min` (relative to now); a `Low` job enqueued 1 minute ago has `score = -1min - 0 = -1min`, so the `High` job wins (lower score). But a `Low` job enqueued 20 minutes ago has `score = -20min - 0 = -20min`, which beats the 1-minute-old `High` job's `-16min` - the older `Low` job still dispatches first. (At exactly a 15-minute age gap the two scores tie; ties break on whatever secondary order the backend/driver happens to apply, so don't rely on exact-boundary behavior.)
+The "max headstart" column is the boost value itself, since `Low` is the zero baseline. For two arbitrary priorities, the max headstart one can steal over the other is the *difference* between their boosts - e.g. `Critical` over `Medium` is `60 - 5 = 55 min`, and `Critical` over `High` is `60 - 15 = 45 min`.
+
+Worked example: a `High` job enqueued 1 minute ago has `score = -1min - 15min = -16min` (relative to now); a `Low` job enqueued 1 minute ago has `score = -1min - 0 = -1min`, so the `High` job wins (lower score). But a `Low` job enqueued 20 minutes ago has `score = -20min - 0 = -20min`, which beats the 1-minute-old `High` job's `-16min` - the older `Low` job still dispatches first. (At exactly a 15-minute age gap the two scores tie; ties break on whatever secondary order the backend/driver happens to apply, so don't rely on exact-boundary behavior.)
 
 **Behavior change from before this feature existed:** every backend's `ORDER BY` used to be `ScheduledFor` alone, and since an immediate ("run now") job has `ScheduledFor = NULL`, every backend's ascending sort put `NULL`s first - so an immediate job always dispatched before *any* scheduled-for-later job, no matter how old that scheduled job was. A boost can't be subtracted from `NULL`, so the score now uses `COALESCE(ScheduledFor, EnqueuedAt)` uniformly: immediate jobs compete with scheduled jobs on the same timeline (adjusted by priority) instead of automatically jumping the whole queue. This was an incidental side effect of the old sort, never a documented guarantee, and the new behavior is generally more sensible - but it is a real, observable change to existing deployments' dispatch order.
 
