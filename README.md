@@ -372,9 +372,7 @@ Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a conf
 
 The dashboard updates in real time over a dedicated SignalR connection (`/axon/hub`, gated by the same dashboard auth) rather than polling: every job, recurring-job, server, or client change is pushed to open dashboard tabs the moment it happens. If that connection is ever unavailable (network blip, outbound access to the SignalR JS CDN blocked, etc.) the dashboard automatically falls back to polling every 5s and keeps retrying the push connection in the background.
 
-See [Axon.Example](Axon.Example) for a complete, runnable ASP.NET Core project wired up end-to-end (server + client in the same process).
-
-For a real horizontally-scaled deployment - 3 `Axon.Server` instances behind a load balancer, sharing SQL Server and a Redis backplane, with a separate client - see [deploy/](deploy) for a docker compose stack that runs the whole thing with one command.
+See [examples/](examples) for complete, runnable ASP.NET Core projects ([Axon.Example.Server](examples/Axon.Example.Server), [Axon.Example.Client](examples/Axon.Example.Client)) wired up end-to-end, and [deploy/](deploy) for a docker compose stack that runs 3 `Axon.Server` instances behind a load balancer, sharing SQL Server and a Redis backplane, with a separate client - a real horizontally-scaled deployment running with one command.
 
 ## Architecture
 
