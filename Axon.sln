@@ -18,6 +18,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{47C26724-B7FC-41D9-885B-941B463B8DEB}"
 	ProjectSection(SolutionItems) = preProject
 		docs\architecture.md = docs\architecture.md
+		README.md = README.md
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{7D34D4F5-61E1-465C-BA77-E01FF3948998}"
