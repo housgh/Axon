@@ -362,11 +362,26 @@ A recurring job can be paused, resumed, or skip its single next occurrence — f
 
 ### 9. Open the dashboard
 
-Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password. The dashboard is organized into four tabs:
+Navigate to `/axon` on whichever host runs `Axon.Server` and sign in with a configured username/password.
+
+<img src="docs/images/dashboard-login.png" alt="Axon dashboard sign-in screen" width="480" />
+
+The dashboard is organized into four tabs:
 - **Jobs** — job history, state, retry/delete.
+
+  <img src="docs/images/dashboard-jobs.png" alt="Axon dashboard Jobs tab" width="720" />
+
 - **Recurring jobs** — schedules, last/next run, trigger/remove.
+
+  <img src="docs/images/dashboard-recurring-jobs.png" alt="Axon dashboard Recurring jobs tab" width="720" />
+
 - **Servers** — active `Axon.Server` instances, each heartbeating every 15s and shown offline once its heartbeat is more than 45s old. With the default in-memory store an instance only ever sees itself; use `Axon.Store.SqlServer`, `Axon.Store.Postgres`, `Axon.Store.MySql`, or `Axon.Store.MongoDb` to see every instance behind a multi-instance deployment.
+
+  <img src="docs/images/dashboard-servers.png" alt="Axon dashboard Servers tab" width="720" />
+
 - **Clients** — connected devices, shown Idle or Processing depending on whether a job is currently dispatched to them. A SignalR connection is pinned to whichever instance accepted it, so with the default in-memory registry this list is instance-local (`Axon.Server.Redis` makes dispatch/push still reach the right client, but each instance only lists the clients connected to itself); use `Axon.Store.SqlServer`, `Axon.Store.Postgres`, `Axon.Store.MySql`, or `Axon.Store.MongoDb` to see every connected client across the whole fleet, regardless of which instance it's connected to.
+
+  <img src="docs/images/dashboard-clients.png" alt="Axon dashboard Clients tab" width="720" />
 
 `ReadOnly` users see the same data but without retry/delete/trigger controls.
 
