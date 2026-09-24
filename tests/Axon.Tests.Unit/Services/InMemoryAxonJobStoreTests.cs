@@ -149,14 +149,17 @@ public class InMemoryAxonJobStoreTests
     }
 
     [Fact]
-    public async Task DeleteJob_RemovesJobAndHistory()
+    public async Task DeleteJob_SoftDeletesJobButKeepsHistory()
     {
+        // Soft delete, matching every real (SQL/Mongo) backend's DeleteJob: the job disappears
+        // from normal lookups, but its history is left alone (only DeleteCompletedJobsOlderThan's
+        // cleanup sweep removes history rows).
         await _sut.AddJob(JobFactory.CreateJob("job-1"));
 
         await _sut.DeleteJob("job-1");
 
         (await _sut.GetJob("job-1")).Should().BeNull();
-        (await _sut.GetHistory("job-1")).Should().BeEmpty();
+        (await _sut.GetHistory("job-1")).Should().NotBeEmpty();
     }
 
     [Fact]
@@ -238,7 +241,7 @@ public class InMemoryAxonJobStoreTests
     }
 
     [Fact]
-    public async Task DeleteCompletedJobsOlderThan_DeletesTerminalJobsPastCutoff()
+    public async Task DeleteCompletedJobsOlderThan_DeletesSucceededJobsPastCutoff()
     {
         await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
         await _sut.UpdateState("job-1", JobState.Succeeded);
@@ -282,13 +285,66 @@ public class InMemoryAxonJobStoreTests
     }
 
     [Fact]
-    public async Task DeleteCompletedJobsOlderThan_DeletesSkippedJobs()
+    public async Task DeleteCompletedJobsOlderThan_NeverDeletesSkippedJobs()
     {
         await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.AwaitingParent));
         await _sut.UpdateState("job-1", JobState.Skipped);
 
+        var deleted = await _sut.DeleteCompletedJobsOlderThan(DateTime.UtcNow.AddYears(1).Ticks);
+
+        deleted.Should().Be(0);
+        (await _sut.GetJob("job-1")).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_NeverDeletesFailedJobs()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
+        await _sut.UpdateState("job-1", JobState.Failed);
+
+        var deleted = await _sut.DeleteCompletedJobsOlderThan(DateTime.UtcNow.AddYears(1).Ticks);
+
+        deleted.Should().Be(0);
+        (await _sut.GetJob("job-1")).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CountJobsByState_CountsSoftDeletedSucceededJobs()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
+        await _sut.UpdateState("job-1", JobState.Succeeded);
+
         var deleted = await _sut.DeleteCompletedJobsOlderThan(DateTime.UtcNow.AddSeconds(1).Ticks);
+        var counts = await _sut.CountJobsByState();
 
         deleted.Should().Be(1);
+        counts[JobState.Succeeded].Should().Be(1);
+        (await _sut.GetJob("job-1")).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task CountJobsByState_CountsLiveJobsPerState()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
+        await _sut.AddJob(JobFactory.CreateJob("job-2", state: JobState.Enqueued));
+        await _sut.UpdateState("job-2", JobState.Succeeded);
+
+        var counts = await _sut.CountJobsByState();
+
+        counts[JobState.Enqueued].Should().Be(1);
+        counts[JobState.Succeeded].Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DeleteJob_SoftDeletesButStillCountsForStats()
+    {
+        await _sut.AddJob(JobFactory.CreateJob("job-1", state: JobState.Enqueued));
+        await _sut.UpdateState("job-1", JobState.Succeeded);
+
+        await _sut.DeleteJob("job-1");
+        var counts = await _sut.CountJobsByState();
+
+        (await _sut.GetJob("job-1")).Should().BeNull();
+        counts[JobState.Succeeded].Should().Be(1);
     }
 }

@@ -142,6 +142,12 @@ stateDiagram-v2
 
 A continuation job (created via `ContinueWithAsync`) starts in `AwaitingParent` instead of `Enqueued`/`Scheduled`, so `AxonJobProcessor`'s poll loop never picks it up for dispatch until it's promoted. The parent's `MarkSucceededAsync`/terminal `MarkFailedAsync` path resolves every job waiting on it (`IAxonJobStore.GetContinuationsWaitingOn`) the moment the parent reaches Succeeded or Failed - including immediately, if the parent had already finished by the time the continuation was created.
 
+## Job data retention
+
+`AxonJobCleanupProcessor` runs by default (see `AddAxonServer`/`AddJobCleanup`), purging `Succeeded` jobs whose most recent history entry is older than the configured retention (1 day by default). `Failed` and `Skipped` jobs are never touched, regardless of age - they're kept around for debugging.
+
+"Purge" is a soft delete, not a hard delete: every SQL backend flips `IsDeleted = 1` on the `Jobs` row (only its `JobHistory` rows are actually removed) rather than deleting the row itself; MongoDB sets `IsDeleted: true` the same way. `GetJobs`/`GetJob` filter `IsDeleted = 0`, so a purged job disappears from the dashboard's Jobs table, the REST API's job listings, and retry/delete actions - but `IAxonJobStore.CountJobsByState` deliberately does *not* filter it out for terminal states, so `GET /axon/stats` (what the dashboard's stat tiles and Total count are sourced from) keeps counting it. This is why cleanup can run indefinitely without the Succeeded/Total numbers ever going down - a job that succeeded and was later purged still counts toward the lifetime tally, it just stops being individually inspectable.
+
 ## Orphan reclaim (crash / disconnect recovery)
 
 Two independent paths reclaim a job stuck in `Processing`, so recovery doesn't depend on a clean disconnect:

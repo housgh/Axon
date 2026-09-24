@@ -379,14 +379,15 @@ public class AxonMongoStore(string connectionString, string databaseName) : IAxo
     {
         // A job's "finished at" isn't its own field - it's the timestamp of its most recent
         // JobHistory document - so identify candidates via an aggregation join rather than a
-        // dedicated completed-at field, mirroring the SQL backends' equivalent JOIN query.
-        var terminalStates = new[] { (int)JobState.Succeeded, (int)JobState.Failed, (int)JobState.Skipped };
+        // dedicated completed-at field, mirroring the SQL backends' equivalent JOIN query. Only
+        // Succeeded jobs are cleaned up - Failed and Skipped are kept indefinitely regardless of
+        // age.
         var pipeline = PipelineDefinition<BsonDocument, BsonDocument>.Create(
         [
             new BsonDocument("$match", new BsonDocument
             {
                 { "IsDeleted", false },
-                { "State", new BsonDocument("$in", new BsonArray(terminalStates)) }
+                { "State", (int)JobState.Succeeded }
             }),
             new BsonDocument("$lookup", new BsonDocument
             {
@@ -428,5 +429,29 @@ public class AxonMongoStore(string connectionString, string databaseName) : IAxo
         }
 
         return jobIds.Count;
+    });
+
+    public Task<Dictionary<JobState, int>> CountJobsByState() => MongoExceptionTranslator.Run(connectionString, async () =>
+    {
+        // Live jobs in any state, plus soft-deleted (cleaned-up) jobs only when terminal - so a
+        // Succeeded job purged by DeleteCompletedJobsOlderThan still counts, but IsDeleted never
+        // applies to a non-terminal state in practice anyway.
+        var terminalStates = new[] { (int)JobState.Succeeded, (int)JobState.Failed, (int)JobState.Skipped };
+        var pipeline = PipelineDefinition<BsonDocument, BsonDocument>.Create(
+        [
+            new BsonDocument("$match", new BsonDocument("$or", new BsonArray
+            {
+                new BsonDocument("IsDeleted", false),
+                new BsonDocument("State", new BsonDocument("$in", new BsonArray(terminalStates)))
+            })),
+            new BsonDocument("$group", new BsonDocument
+            {
+                { "_id", "$State" },
+                { "Count", new BsonDocument("$sum", 1) }
+            })
+        ]);
+
+        var rows = await Jobs.Aggregate(pipeline).ToListAsync();
+        return rows.ToDictionary(d => (JobState)d["_id"].AsInt32, d => d["Count"].AsInt32);
     });
 }

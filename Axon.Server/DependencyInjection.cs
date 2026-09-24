@@ -86,6 +86,13 @@ public static class DependencyInjection
         services.AddHostedService<AxonServerInstanceHeartbeat>();
         services.AddHealthChecks().AddCheck<AxonJobStoreHealthCheck>("axon-job-store", tags: [ReadinessHealthCheckTag]);
 
+        // On by default (1-day Succeeded-only retention) - chain .AddJobCleanup(...) to override
+        // the retention/poll interval. TryAddSingleton here, plain AddSingleton in AddJobCleanup,
+        // mirrors the same "explicit call registered after this one wins" pattern used for
+        // IAxonJobStore etc. above.
+        services.TryAddSingleton(new AxonJobCleanupOptions());
+        services.AddHostedService<AxonJobCleanupProcessor>();
+
         return new AxonServerBuilder(services);
     }
 
@@ -110,22 +117,24 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Opts into a background sweep that purges completed jobs (Succeeded/Failed/Skipped) and
-    /// their history older than <paramref name="retention"/>, so the Jobs/JobHistory tables don't
-    /// grow unbounded in a long-running deployment. Off by default - without this call, jobs are
-    /// kept forever.
+    /// Overrides the default job-cleanup retention/poll interval. Cleanup itself is always on
+    /// (see <c>AddAxonServer</c>) - by default it purges Succeeded jobs older than 1 day, sweeping
+    /// once an hour. Failed and Skipped jobs are never purged automatically, regardless of what's
+    /// configured here.
     /// </summary>
-    public static AxonServerBuilder AddJobCleanup(this AxonServerBuilder builder, TimeSpan retention, TimeSpan? pollInterval = null)
+    public static AxonServerBuilder AddJobCleanup(this AxonServerBuilder builder, TimeSpan? retention = null, TimeSpan? pollInterval = null)
     {
-        if (retention <= TimeSpan.Zero)
+        if (retention is { } r && r <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(retention), "Retention must be positive.");
 
+        // Plain AddSingleton here overrides AddAxonServer's TryAddSingleton default, since
+        // AddJobCleanup is always called after AddAxonServer in the builder chain - the hosted
+        // service itself is already registered once by AddAxonServer, not re-added here.
         builder.Services.AddSingleton(new AxonJobCleanupOptions
         {
-            Retention = retention,
+            Retention = retention ?? TimeSpan.FromDays(1),
             PollInterval = pollInterval ?? TimeSpan.FromHours(1)
         });
-        builder.Services.AddHostedService<AxonJobCleanupProcessor>();
         return builder;
     }
 
@@ -409,6 +418,23 @@ public static class DependencyInjection
 
             axon.MapGet("/jobs/{jobId}/history", async (IAxonJobStore jobStore, string jobId) =>
                 Results.Ok(await jobStore.GetHistory(jobId)));
+
+            // Lifetime counts, not a live-row COUNT(*): Succeeded/Failed/Skipped include jobs
+            // already cleaned up by the retention sweep, so these numbers never drop when cleanup
+            // runs. See IAxonJobStore.CountJobsByState.
+            axon.MapGet("/stats", async (IAxonJobStore jobStore) =>
+            {
+                var counts = await jobStore.CountJobsByState();
+                return Results.Ok(new
+                {
+                    Total = counts.Values.Sum(),
+                    Enqueued = counts.GetValueOrDefault(JobState.Enqueued),
+                    Scheduled = counts.GetValueOrDefault(JobState.Scheduled),
+                    Processing = counts.GetValueOrDefault(JobState.Processing),
+                    Succeeded = counts.GetValueOrDefault(JobState.Succeeded),
+                    Failed = counts.GetValueOrDefault(JobState.Failed),
+                });
+            });
 
             axon.MapGet("/recurring-jobs", async (IAxonRecurringJobStore recurringJobStore, int skip = 0, int take = 0) =>
                 Results.Ok(await recurringJobStore.GetAll(skip, take == 0 ? 20 : take)));

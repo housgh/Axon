@@ -342,7 +342,7 @@ public class AxonMySqlStoreTests(MySqlFixture fixture)
     }
 
     [Fact]
-    public async Task DeleteCompletedJobsOlderThan_DeletesTerminalJobPastCutoffAndItsHistory()
+    public async Task DeleteCompletedJobsOlderThan_DeletesSucceededJobPastCutoffAndItsHistory()
     {
         // Asserts on this test's own job id, not the returned count: the fixture database is
         // shared across every test in this class (via the collection fixture), so a bare count
@@ -357,6 +357,44 @@ public class AxonMySqlStoreTests(MySqlFixture fixture)
 
         (await sut.GetJob(job.JobId)).Should().BeNull();
         (await sut.GetHistory(job.JobId)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteCompletedJobsOlderThan_NeverDeletesFailedOrSkippedJobsAgainstRealMySql()
+    {
+        var sut = CreateSut();
+        var failed = JobFactory.CreateJob(state: JobState.Enqueued);
+        await sut.AddJob(failed);
+        await sut.UpdateState(failed.JobId, JobState.Failed);
+
+        var skipped = JobFactory.CreateJob(state: JobState.AwaitingParent);
+        await sut.AddJob(skipped);
+        await sut.UpdateState(skipped.JobId, JobState.Skipped);
+
+        await sut.DeleteCompletedJobsOlderThan(DateTime.UtcNow.AddYears(1).Ticks);
+
+        (await sut.GetJob(failed.JobId)).Should().NotBeNull();
+        (await sut.GetJob(skipped.JobId)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task CountJobsByState_CountsSoftDeletedSucceededJobAgainstRealMySql()
+    {
+        // Asserts the count increased by exactly 1 relative to a baseline taken before this
+        // test's own job existed, since the fixture database is shared across the whole class.
+        var sut = CreateSut();
+        var before = await sut.CountJobsByState();
+        var baseline = before.GetValueOrDefault(JobState.Succeeded);
+
+        var job = JobFactory.CreateJob(state: JobState.Enqueued);
+        await sut.AddJob(job);
+        await sut.UpdateState(job.JobId, JobState.Succeeded);
+        await sut.DeleteCompletedJobsOlderThan(DateTime.UtcNow.AddSeconds(1).Ticks);
+
+        var after = await sut.CountJobsByState();
+
+        (await sut.GetJob(job.JobId)).Should().BeNull();
+        after[JobState.Succeeded].Should().Be(baseline + 1);
     }
 
     [Fact]

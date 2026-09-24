@@ -299,16 +299,17 @@ public class AxonMySqlStore(string connectionString) : IAxonJobStore
         // A job's "finished at" isn't its own column - it's the timestamp of its most recent
         // JobHistory row - so identify candidates via that join rather than a dedicated
         // completed-at column, to avoid adding one more field every terminal-state code path
-        // would need to remember to set.
+        // would need to remember to set. Only Succeeded jobs are cleaned up - Failed and Skipped
+        // are kept indefinitely regardless of age.
         const string selectSql = @"
             SELECT j.`JobId` FROM `Jobs` j
             INNER JOIN (
                 SELECT `JobId`, MAX(`Timestamp`) AS `LastTimestamp` FROM `JobHistory` GROUP BY `JobId`
             ) h ON h.`JobId` = j.`JobId`
-            WHERE j.`IsDeleted` = 0 AND j.`State` IN @States AND h.`LastTimestamp` < @Cutoff";
+            WHERE j.`IsDeleted` = 0 AND j.`State` = @Succeeded AND h.`LastTimestamp` < @Cutoff";
         var jobIds = (await conn.QueryAsync<string>(selectSql, new
         {
-            States = new[] { (int)JobState.Succeeded, (int)JobState.Failed, (int)JobState.Skipped },
+            Succeeded = (int)JobState.Succeeded,
             Cutoff = cutoff
         }, tx)).ToList();
 
@@ -326,5 +327,24 @@ public class AxonMySqlStore(string connectionString) : IAxonJobStore
 
         await tx.CommitAsync();
         return jobIds.Count;
+    });
+
+    public Task<Dictionary<JobState, int>> CountJobsByState() => MySqlExceptionTranslator.Run(connectionString, async () =>
+    {
+        await using var conn = CreateConnection();
+
+        // Live jobs in any state, plus soft-deleted (cleaned-up) jobs only when terminal - so a
+        // Succeeded job purged by DeleteCompletedJobsOlderThan still counts, but IsDeleted never
+        // applies to a non-terminal state in practice anyway.
+        const string sql = @"
+            SELECT `State`, COUNT(*) AS `Count` FROM `Jobs`
+            WHERE `IsDeleted` = 0 OR `State` IN @States
+            GROUP BY `State`";
+        var rows = await conn.QueryAsync<(int State, int Count)>(sql, new
+        {
+            States = new[] { (int)JobState.Succeeded, (int)JobState.Failed, (int)JobState.Skipped }
+        });
+
+        return rows.ToDictionary(r => (JobState)r.State, r => r.Count);
     });
 }

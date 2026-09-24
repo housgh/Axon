@@ -56,6 +56,16 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
   an incidental side effect of the old sort, never a documented guarantee. Immediate jobs now
   compete with scheduled jobs on the same timeline (adjusted by `Priority`) instead of
   automatically jumping the whole queue. See docs/architecture.md#job-priority.
+- Job data cleanup is now on by default: `Succeeded` jobs older than 1 day are purged
+  automatically (previously, `.AddJobCleanup(retention, ...)` had to be called explicitly, and
+  purged all of `Succeeded`/`Failed`/`Skipped` on the same window). `Failed` and `Skipped` jobs
+  are now never purged automatically, regardless of age. `.AddJobCleanup(retention, pollInterval)`
+  still exists to override the default retention/poll interval, but its `retention` parameter is
+  now optional. New `GET /axon/stats` endpoint and `IAxonJobStore.CountJobsByState` report
+  lifetime job counts per state that never decrease because of cleanup - a purged job still counts
+  toward its terminal state's total. The dashboard's stat tiles now read from this endpoint instead
+  of counting a capped, cleanup-affected job listing. See
+  docs/architecture.md#job-data-retention.
 
 ## [0.1.2] - 2026-09-20
 

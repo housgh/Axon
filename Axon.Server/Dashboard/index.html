@@ -904,15 +904,15 @@
 
   async function loadStats() {
     try {
-      const results = await Promise.all(STATE_NAMES.map(function (_, idx) {
-        return apiFetch('/axon/jobs?skip=0&take=1000&state=' + idx).then(function (r) { return r.json(); });
-      }));
-      let total = 0;
-      results.forEach(function (list, idx) {
-        document.getElementById('stat-' + idx).textContent = list.length;
-        total += list.length;
-      });
-      document.getElementById('stat-total').textContent = total;
+      const stats = await apiFetch('/axon/stats').then(function (r) { return r.json(); });
+      // Lifetime counts (see /axon/stats): Succeeded/Failed never drop when cleanup purges old
+      // jobs, unlike the per-state job list this used to derive counts from.
+      document.getElementById('stat-0').textContent = stats.enqueued;
+      document.getElementById('stat-1').textContent = stats.scheduled;
+      document.getElementById('stat-2').textContent = stats.processing;
+      document.getElementById('stat-3').textContent = stats.succeeded;
+      document.getElementById('stat-4').textContent = stats.failed;
+      document.getElementById('stat-total').textContent = stats.total;
       setLive(true);
     } catch (e) {
       setLive(false);

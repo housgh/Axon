@@ -193,9 +193,9 @@ builder.Services.AddAxonServer()
 
 This only registers Axon's meter/activity source with the SDK - configure whatever exporter you want (OTLP, console, Prometheus, etc.) via `configureMetrics`/`configureTracing`, the same way you would for any other OpenTelemetry SDK setup.
 
-### 5. (Optional) Register job data cleanup
+### 5. (Optional) Override job data cleanup
 
-By default, completed jobs (`Succeeded`/`Failed`/`Skipped`) and their history are kept forever. Chain `.AddJobCleanup(...)` to purge them after a retention window, so the Jobs/JobHistory tables don't grow unbounded in a long-running deployment:
+`Succeeded` jobs and their history are cleaned up automatically - a background sweep (once an hour by default) purges `Succeeded` jobs whose most recent history entry is older than 1 day, so the Jobs/JobHistory tables don't grow unbounded in a long-running deployment. `Failed` and `Skipped` jobs are kept forever regardless of age, and dashboard/API job counts (`GET /axon/stats`) never drop because of this cleanup - a job that succeeded and was later purged still counts toward the lifetime total. Chain `.AddJobCleanup(...)` to override the retention/poll interval:
 
 ```csharp
 builder.Services.AddAxonServer()
@@ -203,7 +203,7 @@ builder.Services.AddAxonServer()
     .AddJobCleanup(retention: TimeSpan.FromDays(30));
 ```
 
-A background sweep (once an hour by default; override with the `pollInterval` parameter) deletes completed jobs whose most recent history entry is older than `retention`. `Enqueued`/`Scheduled`/`Processing`/`AwaitingParent` jobs are never touched, regardless of age.
+`Enqueued`/`Scheduled`/`Processing`/`AwaitingParent` jobs are never touched, regardless of age.
 
 ### 6. Register the client
 

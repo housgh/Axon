@@ -7,6 +7,12 @@ internal class InMemoryAxonJobStore : IAxonJobStore
 {
     private readonly List<Job> _jobs = [];
     private readonly List<JobHistoryEntry> _history = [];
+
+    // Mirrors the SQL/Mongo backends' IsDeleted column/field: DeleteJob and
+    // DeleteCompletedJobsOlderThan soft-delete (the Jobs row stays, so CountJobsByState can still
+    // see it) rather than removing from _jobs outright - otherwise this store's lifetime stats
+    // would go down after cleanup while every real backend's wouldn't.
+    private readonly HashSet<string> _deletedJobIds = [];
     private readonly object _lock = new();
 
     private void AppendHistory(string jobId, JobState state, string? note)
@@ -34,7 +40,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            return Task.FromResult(_jobs.FirstOrDefault(j => j.JobId == id));
+            return Task.FromResult(_jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId)));
         }
     }
 
@@ -45,6 +51,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
             var query = states is { Length: > 0 }
                 ? _jobs.Where(j => states.Contains(j.State))
                 : _jobs.AsEnumerable();
+            query = query.Where(j => !_deletedJobIds.Contains(j.JobId));
 
             // Effective dispatch score: COALESCE(ScheduledFor, EnqueuedAt) - Boost[Priority] -
             // see JobPriorityBoost for why this shape lets a sufficiently old low-priority job
@@ -59,7 +66,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id);
+            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
             if (job is not null)
             {
                 job.State = state;
@@ -73,7 +80,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id);
+            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
             if (job is not null)
             {
                 job.Attempts++;
@@ -89,7 +96,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id);
+            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
             if (job is not null)
             {
                 job.Attempts = 0;
@@ -105,8 +112,11 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            _jobs.RemoveAll(j => j.JobId == id);
-            _history.RemoveAll(h => h.JobId == id);
+            // Soft delete, same as the SQL/Mongo backends: the Jobs row and its State stay, only
+            // marked deleted, so CountJobsByState's lifetime tally is unaffected. History is left
+            // alone too - matches DeleteJob (manual single-job delete) on every other backend,
+            // which only ever touches the Jobs row.
+            _deletedJobIds.Add(id);
         }
         return Task.CompletedTask;
     }
@@ -124,7 +134,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id);
+            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
             if (job is null || (job.State != JobState.Enqueued && job.State != JobState.Scheduled))
             {
                 return Task.FromResult(false);
@@ -190,14 +200,12 @@ internal class InMemoryAxonJobStore : IAxonJobStore
         }
     }
 
-    private static readonly JobState[] TerminalStates = [JobState.Succeeded, JobState.Failed, JobState.Skipped];
-
     public Task<int> DeleteCompletedJobsOlderThan(long cutoff)
     {
         lock (_lock)
         {
             var toDelete = _jobs
-                .Where(j => TerminalStates.Contains(j.State))
+                .Where(j => j.State == JobState.Succeeded && !_deletedJobIds.Contains(j.JobId))
                 .Where(j =>
                 {
                     var lastHistoryTimestamp = _history.Where(h => h.JobId == j.JobId).Select(h => h.Timestamp).DefaultIfEmpty(0).Max();
@@ -206,10 +214,26 @@ internal class InMemoryAxonJobStore : IAxonJobStore
                 .Select(j => j.JobId)
                 .ToList();
 
-            _jobs.RemoveAll(j => toDelete.Contains(j.JobId));
+            foreach (var jobId in toDelete)
+            {
+                _deletedJobIds.Add(jobId);
+            }
             _history.RemoveAll(h => toDelete.Contains(h.JobId));
 
             return Task.FromResult(toDelete.Count);
+        }
+    }
+
+    public Task<Dictionary<JobState, int>> CountJobsByState()
+    {
+        lock (_lock)
+        {
+            // Soft-deleted jobs still count here (unlike everywhere else in this store) so the
+            // lifetime Succeeded/Failed/Skipped tally never drops when cleanup runs - see the
+            // IAxonJobStore.CountJobsByState doc comment.
+            return Task.FromResult(_jobs
+                .GroupBy(j => j.State)
+                .ToDictionary(g => g.Key, g => g.Count()));
         }
     }
 }

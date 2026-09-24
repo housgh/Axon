@@ -34,10 +34,20 @@ public interface IAxonJobStore
     Task<List<Job>> GetContinuationsWaitingOn(string parentJobId);
 
     /// <summary>
-    /// Deletes (soft-deletes, same as <see cref="DeleteJob"/>) every job in a terminal state
-    /// (Succeeded, Failed, or Skipped) whose most recent history entry is older than
-    /// <paramref name="cutoff"/>, along with that job's history rows. Returns the number of jobs
-    /// deleted. Used by the opt-in job-data retention cleanup.
+    /// Deletes (soft-deletes, same as <see cref="DeleteJob"/>) every <see cref="JobState.Succeeded"/>
+    /// job whose most recent history entry is older than <paramref name="cutoff"/>, along with that
+    /// job's history rows. Returns the number of jobs deleted. Failed and Skipped jobs are never
+    /// touched, regardless of age. Used by the job-data retention cleanup (see <c>AddJobCleanup</c>).
     /// </summary>
     Task<int> DeleteCompletedJobsOlderThan(long cutoff);
+
+    /// <summary>
+    /// Lifetime counts per <see cref="JobState"/>. For the terminal states (Succeeded, Failed,
+    /// Skipped) this includes jobs already soft-deleted by <see cref="DeleteCompletedJobsOlderThan"/>
+    /// or <see cref="DeleteJob"/>, so cleanup never makes these numbers go down - a job that
+    /// succeeded and was later cleaned up still counts. Non-terminal states (Enqueued, Scheduled,
+    /// Processing, AwaitingParent) reflect only live jobs, since those are never subject to cleanup.
+    /// States with no jobs are omitted rather than present with a zero count.
+    /// </summary>
+    Task<Dictionary<JobState, int>> CountJobsByState();
 }
