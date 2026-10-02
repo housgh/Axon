@@ -15,6 +15,8 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     private readonly HashSet<string> _deletedJobIds = [];
     private readonly object _lock = new();
 
+    private Job? FindActiveJob(string id) => _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
+
     private void AppendHistory(string jobId, JobState state, string? note)
     {
         _history.Add(new JobHistoryEntry
@@ -40,7 +42,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            return Task.FromResult(_jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId)));
+            return Task.FromResult(FindActiveJob(id));
         }
     }
 
@@ -66,7 +68,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
+            var job = FindActiveJob(id);
             if (job is not null)
             {
                 job.State = state;
@@ -80,7 +82,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
+            var job = FindActiveJob(id);
             if (job is not null)
             {
                 job.Attempts++;
@@ -96,7 +98,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
+            var job = FindActiveJob(id);
             if (job is not null)
             {
                 job.Attempts = 0;
@@ -134,7 +136,7 @@ internal class InMemoryAxonJobStore : IAxonJobStore
     {
         lock (_lock)
         {
-            var job = _jobs.FirstOrDefault(j => j.JobId == id && !_deletedJobIds.Contains(j.JobId));
+            var job = FindActiveJob(id);
             if (job is null || (job.State != JobState.Enqueued && job.State != JobState.Scheduled))
             {
                 return Task.FromResult(false);

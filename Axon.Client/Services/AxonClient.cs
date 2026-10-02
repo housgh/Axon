@@ -4,6 +4,7 @@ using Axon.Core.Enums;
 using Axon.Core.Helpers;
 using Axon.Core.Models;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Logging;
 
 namespace Axon.Client.Services;
 
@@ -49,9 +50,10 @@ public interface IAxonClient
 
 internal class AxonClient : IAxonClient
 {
-    public AxonClient(HubConnection hubConnection)
+    public AxonClient(HubConnection hubConnection, ILogger<AxonClient> logger)
     {
         _hubConnection = hubConnection;
+        _logger = logger;
         _deviceName = $"{Environment.MachineName}_{Guid.NewGuid()}";
         InitClient();
         StartAndRegister();
@@ -82,8 +84,9 @@ internal class AxonClient : IAxonClient
                 await _hubConnection.InvokeAsync("Register", _deviceName);
                 return;
             }
-            catch
+            catch (Exception e)
             {
+                _logger.LogWarning(e, "Failed to connect/register with Axon.Server, retrying in {Delay}", delay);
                 await Task.Delay(delay);
                 delay = TimeSpan.FromSeconds(Math.Min(delay.TotalSeconds * 2, 30));
             }
@@ -91,6 +94,7 @@ internal class AxonClient : IAxonClient
     }
 
     private readonly HubConnection _hubConnection;
+    private readonly ILogger<AxonClient> _logger;
     private readonly string _deviceName;
 
     public Task<string> EnqueueAsync(Expression<Action> methodCall, AxonEnqueueOptions? options = null) =>

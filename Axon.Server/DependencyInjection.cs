@@ -37,6 +37,7 @@ public static class DependencyInjection
     private static string? _dashboardHtml;
     private static string? _loginHtml;
     private static string? _jobHtml;
+    private static string? _dashboardSharedJs;
     private static byte[]? _faviconBytes;
 
     private static string GetEmbeddedResource(string suffix)
@@ -65,6 +66,7 @@ public static class DependencyInjection
     private static string GetDashboardHtml() => _dashboardHtml ??= GetEmbeddedResource("Dashboard.index.html");
     private static string GetLoginHtml() => _loginHtml ??= GetEmbeddedResource("Dashboard.login.html");
     private static string GetJobHtml() => _jobHtml ??= GetEmbeddedResource("Dashboard.job.html");
+    private static string GetDashboardSharedJs() => _dashboardSharedJs ??= GetEmbeddedResource("Dashboard.shared.js");
     private static byte[] GetFaviconBytes() => _faviconBytes ??= GetEmbeddedResourceBytes("Dashboard.axon.ico");
 
     // Falls back to "anonymous" rather than throwing when auth isn't configured (writes are open
@@ -304,6 +306,8 @@ public static class DependencyInjection
             }
 
             axon.MapGet("/favicon.ico", () => Results.Bytes(GetFaviconBytes(), "image/x-icon")).AllowAnonymous();
+
+            axon.MapGet("/dashboard/shared.js", () => Results.Content(GetDashboardSharedJs(), "application/javascript")).AllowAnonymous();
 
             axon.MapGet("/dashboard", () => Results.Content(GetDashboardHtml(), "text/html"));
 

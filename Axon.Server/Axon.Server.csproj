@@ -23,6 +23,7 @@
       <EmbeddedResource Include="Dashboard\index.html" />
       <EmbeddedResource Include="Dashboard\login.html" />
       <EmbeddedResource Include="Dashboard\job.html" />
+      <EmbeddedResource Include="Dashboard\shared.js" />
       <EmbeddedResource Include="Dashboard\axon.ico" />
     </ItemGroup>
 
