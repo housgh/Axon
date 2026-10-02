@@ -3,6 +3,7 @@
 using Axon.Client.Services;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Axon.Client.DependencyInjection;
 
@@ -19,6 +20,10 @@ public static class DependencyInjection
             .WithAutomaticReconnect()
             .Build();
 
+        // AxonClient takes an ILogger<AxonClient> - AddLogging() is a no-op if the host already
+        // configured logging (e.g. any ASP.NET Core/Generic Host app), but without this call here
+        // a bare ServiceCollection consumer would fail to resolve IAxonClient entirely.
+        services.AddLogging();
         services.AddSingleton(connection);
         services.AddSingleton<IAxonClient, AxonClient>();
         services.AddHostedService<AxonClientStarter>();

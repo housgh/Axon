@@ -1,5 +1,6 @@
 using Axon.Client.DependencyInjection;
 using Axon.Client.Services;
+using Axon.Example.Client.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +11,8 @@ builder.Services.AddAxonClient(axonServerUrl);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddScoped<ISampleService, SampleService>();
 
 var app = builder.Build();
 
@@ -44,6 +47,12 @@ app.MapGet("/recurring", async (IAxonClient axonClient) =>
         "* * * * *",
         x => x.SayHello("Recurring tick from the multi-instance cluster"));
     return Results.Ok(new { recurringJobId = "cluster-heartbeat" });
+});
+
+app.MapGet("/dependency", async (IAxonClient axonClient) =>
+{
+    await axonClient.EnqueueAsync<ISampleService>(x => x.RunAsync());
+    return Results.Ok();
 });
 
 app.Run();

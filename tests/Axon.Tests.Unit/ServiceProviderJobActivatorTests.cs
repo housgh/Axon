@@ -22,12 +22,14 @@ public class ServiceProviderJobActivatorTests
         public string Run() => greeter.Greet();
     }
 
-    private static JobInfo JobInfoFor(Type type) => new()
+    private static JobInfo JobInfoFor(Type type, string methodName) => new()
     {
         Assembly = type.Assembly.FullName!,
         DeclaringType = type.FullName!,
-        MethodName = nameof(JobWithDependency.Run)
+        MethodName = methodName
     };
+
+    private static JobInfo JobInfoFor(Type type) => JobInfoFor(type, nameof(JobWithDependency.Run));
 
     [Fact]
     public void CreateInstance_ResolvesConstructorDependencyFromServiceProvider()
@@ -92,5 +94,35 @@ public class ServiceProviderJobActivatorTests
 
         activated.Instance.Should().BeNull();
         activated.Scope.Should().BeNull();
+    }
+
+    // Mirrors Hangfire's interface-job pattern: EnqueueAsync<IGreeter>(x => x.Greet()) records
+    // IGreeter (not Greeter) as the JobInfo's DeclaringType, since that's the method's declaring
+    // type at the call site - so CreateInstance must resolve it as a registered service rather
+    // than trying (and failing) to construct the interface itself.
+    [Fact]
+    public void CreateInstance_InterfaceDeclaringType_ResolvesRegisteredImplementation()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IGreeter, Greeter>();
+        var provider = services.BuildServiceProvider();
+        var sut = new ServiceProviderJobActivator(provider);
+
+        var activated = sut.CreateInstance(JobInfoFor(typeof(IGreeter), nameof(IGreeter.Greet)));
+
+        activated.Instance.Should().BeOfType<Greeter>();
+        ((IGreeter)activated.Instance!).Greet().Should().Be("hello");
+        activated.Scope.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void CreateInstance_InterfaceDeclaringTypeNotRegistered_ThrowsRatherThanReturningNull()
+    {
+        var provider = new ServiceCollection().BuildServiceProvider();
+        var sut = new ServiceProviderJobActivator(provider);
+
+        var act = () => sut.CreateInstance(JobInfoFor(typeof(IGreeter), nameof(IGreeter.Greet)));
+
+        act.Should().Throw<InvalidOperationException>();
     }
 }
