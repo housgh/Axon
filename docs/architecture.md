@@ -29,6 +29,36 @@ sequenceDiagram
     end
 ```
 
+## Monolith (in-process) mode
+
+`AddInProcessClient()` swaps two seams without touching the poll/claim loop above:
+
+- `IAxonClient` is `InProcessAxonClient`, which calls `IAxonJobService`/`IAxonRecurringJobService` directly instead of invoking hub methods. Arguments are serialized to `JsonElement` at enqueue time, so jobs reach `AxonJobExecutor` in exactly the shape SignalR would have delivered them, whichever store is configured.
+- `IAxonJobDispatcher` is `InProcessJobDispatcher` instead of the default `SignalRJobDispatcher`. Its `CanDispatchAsync` ignores `Job.DeviceName` and only checks for a free worker slot, so every instance can run every job.
+
+```mermaid
+sequenceDiagram
+    participant API as Controller (EnqueueAsync)
+    participant Service as IAxonJobService
+    participant Processor as AxonJobProcessor
+    participant Dispatcher as InProcessJobDispatcher
+    participant Executor as AxonJobExecutor
+
+    API->>Service: EnqueueAsync (no network hop)
+    Note over Processor: polls every 5s
+    Processor->>Dispatcher: CanDispatchAsync (worker slot free?)
+    Processor->>Processor: TryClaimJob (unchanged)
+    Processor->>Dispatcher: DispatchAsync (returns immediately)
+    Dispatcher->>Executor: Task.Run ExecuteAsync
+    alt success
+        Dispatcher->>Service: MarkSucceededAsync
+    else failure
+        Dispatcher->>Service: MarkFailedAsync(error)
+    end
+```
+
+On shutdown, `InProcessClientHost.StopAsync` stops new dispatches and waits for running jobs up to the host shutdown timeout. A job still running after that (or one interrupted by a crash) stays `Processing` and is retried by the [orphan reclaim](#orphan-reclaim-crash--disconnect-recovery) deadline sweep, the same path as a disconnected device.
+
 ## Multi-instance dispatch safety
 
 Every `AxonJobProcessor` instance (one per `Axon.Server` process) independently polls for due jobs. With `Axon.Store.SqlServer`, `Axon.Store.Postgres`, `Axon.Store.MySql`, or `Axon.Store.MongoDb` shared across multiple instances, more than one instance can see the same job as due in the same poll cycle. `TryClaimJob` makes only one of them win:
@@ -192,7 +222,7 @@ flowchart LR
 
 ## Graceful shutdown
 
-Axon.Server never executes job bodies itself - those run on `Axon.Client`, on a different process/machine - so there's no in-flight job *execution* for the server to drain on shutdown. What can happen mid-shutdown is `AxonJobProcessor` being cancelled between claiming a job (`TryClaimJob` succeeds, State becomes `Processing`) and finishing the SignalR dispatch call. This is already safe without any special shutdown handling: a claimed-but-undispatched job looks identical, from the store's perspective, to a dispatched-but-unacknowledged one, so the same deadline-sweep path in [Orphan reclaim](#orphan-reclaim-crash--disconnect-recovery) picks it up and retries it - whether the process exited via a crash or a normal shutdown.
+In the default (microservice) mode, Axon.Server never executes job bodies itself - those run on `Axon.Client`, on a different process/machine - so there's no in-flight job *execution* for the server to drain on shutdown. (Monolith mode does run jobs in-process and drains them on shutdown - see [Monolith (in-process) mode](#monolith-in-process-mode).) What can happen mid-shutdown is `AxonJobProcessor` being cancelled between claiming a job (`TryClaimJob` succeeds, State becomes `Processing`) and finishing the SignalR dispatch call. This is already safe without any special shutdown handling: a claimed-but-undispatched job looks identical, from the store's perspective, to a dispatched-but-unacknowledged one, so the same deadline-sweep path in [Orphan reclaim](#orphan-reclaim-crash--disconnect-recovery) picks it up and retries it - whether the process exited via a crash or a normal shutdown.
 
 `AxonServerInstanceHeartbeat` does have explicit `StopAsync` cleanup (deregistering the instance immediately, rather than waiting for its heartbeat to go stale), so the dashboard's Servers tab reflects a graceful shutdown right away instead of a 45s timeout.
 

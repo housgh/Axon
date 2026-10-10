@@ -14,6 +14,11 @@ public static class DependencyInjection
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ArgumentException("An Axon.Server base URL must be provided.", nameof(baseUrl));
 
+        if (services.Any(d => d.ServiceType == typeof(IAxonClient)))
+            throw new InvalidOperationException(
+                "An IAxonClient is already registered (did you also call AddInProcessClient?). " +
+                "Register either the SignalR client or the in-process client, not both.");
+
         baseUrl = baseUrl.TrimEnd('/');
         var connection = new HubConnectionBuilder()
             .WithUrl($"{baseUrl}/hubs/axon")

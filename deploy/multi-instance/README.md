@@ -19,10 +19,13 @@ and **Redis** (SignalR backplane), with **1 `Axon.Client`** connecting through t
              (job store)   (backplane)
 ```
 
+Running a single deployable that enqueues and runs its own jobs instead? See
+[deploy/monolith](../monolith/README.md) for the in-process equivalent: no client service, no Redis, no job WebSocket.
+
 ## Run it
 
 ```bash
-cd deploy
+cd deploy/multi-instance
 cp .env.example .env   # first time only - see "Not for production" below before changing anything
 docker compose up -d --build
 ```
@@ -43,7 +46,7 @@ This stack is a correctness demo, not a deployment template - copying it straigh
 environment would ship two real problems:
 
 - **Secrets in plain text.** `SQL_SA_PASSWORD` (`.env`) and the dashboard passwords
-  (`../examples/Axon.Example.Server/appsettings.json`'s `Axon:DashboardUsers`) are plaintext
+  (`../../examples/Axon.Example.Server/appsettings.json`'s `Axon:DashboardUsers`) are plaintext
   config values, fine for a throwaway local stack but not how you'd want to hand credentials to a
   real deployment - use your platform's actual secrets manager (Docker/Kubernetes secrets, Azure
   Key Vault, AWS Secrets Manager, etc.) instead of baking them into compose/appsettings files.
@@ -59,7 +62,7 @@ neither is an Axon limitation - they're standard concerns for any containerized 
 
 ## What this proves
 
-- **Dispatch correctness across instances**: enqueue a batch (`/enqueue-many/50`) and watch the client's logs — every job runs exactly once, regardless of which of the 3 servers' `AxonJobProcessor` won the atomic claim race against the shared SQL Server job store (see [docs/architecture.md#multi-instance-dispatch-safety](../docs/architecture.md#multi-instance-dispatch-safety)).
+- **Dispatch correctness across instances**: enqueue a batch (`/enqueue-many/50`) and watch the client's logs — every job runs exactly once, regardless of which of the 3 servers' `AxonJobProcessor` won the atomic claim race against the shared SQL Server job store (see [docs/architecture.md#multi-instance-dispatch-safety](../../docs/architecture.md#multi-instance-dispatch-safety)).
 - **Backplane routing**: the client's single WebSocket connection (`/hubs/axon`, round-robin in `nginx.conf` - deliberately *not* sticky) lands on exactly one server instance's process. A job claimed and dispatched by a *different* instance still reaches the client, because `Axon.Server.Redis`'s backplane fans the SignalR call out across all 3 processes. This is the thing this demo exists to prove, so that path is left un-sticky on purpose. (`/axon/clients` will list the connected device on all 3 instances regardless - see below - so it doesn't reveal which one owns the actual WebSocket connection; the backplane fan-out is what you're really watching.)
 
 ## Why the Clients tab is fleet-wide (and dispatch isn't sticky)
@@ -106,5 +109,5 @@ instance directly and confirming the same cookie is then accepted by the other t
 - `docker-compose.yml` — the stack.
 - `.env.example` — copy to `.env` to supply `SQL_SA_PASSWORD` (`.env` itself is gitignored).
 - `nginx.conf` — split-upstream proxy (round-robin for job dispatch, sticky-per-IP for the dashboard/API) with WebSocket upgrade support (required for SignalR).
-- `../examples/Axon.Example.Server/` — minimal server-only host (SQL storage + Redis backplane + dashboard auth + job cleanup, all opted into).
-- `../examples/Axon.Example.Client/` — minimal client-only host with a few HTTP endpoints to trigger jobs.
+- `../../examples/Axon.Example.Server/` — minimal server-only host (SQL storage + Redis backplane + dashboard auth + job cleanup, all opted into).
+- `../../examples/Axon.Example.Client/` — minimal client-only host with a few HTTP endpoints to trigger jobs.

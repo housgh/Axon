@@ -3,6 +3,7 @@
 using System.Reflection;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Axon.Client.Services;
 using Axon.Core.Enums;
 using Axon.Core.Helpers;
 using Axon.Server.Hubs;
@@ -82,6 +83,7 @@ public static class DependencyInjection
         services.TryAddSingleton<IDeviceConnectionRegistry, InMemoryDeviceConnectionRegistry>();
         services.AddSingleton<IAxonDashboardNotifier, AxonDashboardNotifier>();
         services.AddSingleton<IAxonJobService, AxonJobService>();
+        services.TryAddSingleton<IAxonJobDispatcher, SignalRJobDispatcher>();
         services.AddScoped<IAxonRecurringJobService, AxonRecurringJobService>();
         services.AddHostedService<AxonJobProcessor>();
         services.AddHostedService<AxonRecurringJobProcessor>();
@@ -155,6 +157,43 @@ public static class DependencyInjection
 
         var servedQueues = new HashSet<string>(queueNames) { "default" };
         builder.Features.ServedQueues = servedQueues;
+        return builder;
+    }
+
+    /// <summary>
+    /// Monolith mode: runs jobs inside this same process instead of dispatching them over SignalR
+    /// to separately deployed <c>Axon.Client</c> services. Registers an <see cref="IAxonClient"/>
+    /// that writes jobs straight to the job store, and a dispatcher that runs claimed jobs on this
+    /// process's thread pool (up to <see cref="AxonInProcessClientOptions.MaxConcurrentJobs"/> at
+    /// once). No WebSocket, base URL, or <c>AddAxonClient</c> call is needed, and
+    /// <c>UseAxonServer</c> doesn't map the <c>/hubs/axon</c> job hub. Every instance of the
+    /// monolith runs any due job; <c>TryClaimJob</c> keeps that safe across instances sharing a
+    /// durable store.
+    /// </summary>
+    public static AxonServerBuilder AddInProcessClient(this AxonServerBuilder builder, Action<AxonInProcessClientOptions>? configure = null)
+    {
+        var services = builder.Services;
+        if (services.Any(d => d.ServiceType == typeof(IAxonClient)))
+            throw new InvalidOperationException(
+                "An IAxonClient is already registered (did you also call AddAxonClient?). " +
+                "AddInProcessClient replaces the SignalR client entirely - register one or the other, not both.");
+
+        var options = new AxonInProcessClientOptions();
+        configure?.Invoke(options);
+        if (options.MaxConcurrentJobs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(configure), "MaxConcurrentJobs must be positive.");
+        if (string.IsNullOrWhiteSpace(options.DeviceName))
+            throw new ArgumentException("DeviceName must not be empty.", nameof(configure));
+
+        builder.Features.InProcessClient = true;
+        services.AddSingleton(options);
+        services.AddSingleton<AxonJobExecutor>();
+        services.AddSingleton<InProcessJobDispatcher>();
+        // Plain AddSingleton overrides AddAxonServer's TryAddSingleton SignalR default, same
+        // "explicit call registered after this one wins" pattern as AddJobCleanup.
+        services.AddSingleton<IAxonJobDispatcher>(sp => sp.GetRequiredService<InProcessJobDispatcher>());
+        services.AddSingleton<IAxonClient, InProcessAxonClient>();
+        services.AddHostedService<InProcessClientHost>();
         return builder;
     }
 
@@ -257,7 +296,14 @@ public static class DependencyInjection
             app.UseRateLimiter(); // the /login endpoint's LoginRateLimitPolicy is only registered when auth is configured
         }
 
-        app.MapHub<AxonHub>("/hubs/axon");
+        var features = app.Services.GetService<AxonServerFeatures>();
+
+        // Monolith mode (AddInProcessClient) runs jobs in this process, so there are no remote
+        // clients to accept job-hub connections from.
+        if (features?.InProcessClient != true)
+        {
+            app.MapHub<AxonHub>("/hubs/axon");
+        }
 
         // Always mapped, regardless of AddAxonApiEndpoints()/AddAxonDashboard() and regardless of
         // dashboard auth: orchestrator health probes need these independent of whether Axon's
@@ -267,7 +313,6 @@ public static class DependencyInjection
         app.MapHealthChecks("/axon/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
         app.MapHealthChecks("/axon/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains(ReadinessHealthCheckTag) }).AllowAnonymous();
 
-        var features = app.Services.GetService<AxonServerFeatures>();
         var apiEnabled = features?.ApiEnabled ?? false;
         var dashboardEnabled = features?.DashboardEnabled ?? false;
         if (!apiEnabled && !dashboardEnabled)
@@ -578,6 +623,9 @@ public class AxonServerFeatures
     /// Defaults to just <c>"default"</c> for an instance that never calls <c>AddQueues</c>.
     /// </summary>
     public IReadOnlySet<string> ServedQueues { get; set; } = new HashSet<string> { "default" };
+
+    /// <summary>Monolith mode - see <c>AxonServerBuilder.AddInProcessClient</c>.</summary>
+    public bool InProcessClient { get; set; }
 }
 
 public class AxonServerBuilder

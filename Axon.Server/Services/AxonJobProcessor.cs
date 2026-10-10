@@ -2,19 +2,16 @@ using System.Diagnostics;
 using Axon.Core.Enums;
 using Axon.Core.Models;
 using Axon.Server.DependencyInjection;
-using Axon.Server.Hubs;
 using Axon.Server.Interfaces;
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Axon.Server.Services;
 
 public class AxonJobProcessor(
-    IHubContext<AxonHub> hubContext,
+    IAxonJobDispatcher dispatcher,
     IAxonJobStore jobStore,
     IAxonJobService jobService,
-    IDeviceConnectionRegistry deviceRegistry,
     IAxonDashboardNotifier notifier,
     ILogger<AxonJobProcessor> logger,
     AxonServerFeatures? features = null) : BackgroundService
@@ -80,10 +77,10 @@ public class AxonJobProcessor(
                 continue;
             }
 
-            var connectionId = await deviceRegistry.GetConnectionId(job.DeviceName);
-            if (connectionId is null)
+            if (!await dispatcher.CanDispatchAsync(job))
             {
-                // Device is currently offline; leave the job in place and retry next poll.
+                // Nowhere to run it right now (device offline, or no free in-process worker);
+                // leave the job in place and retry next poll.
                 continue;
             }
 
@@ -93,7 +90,7 @@ public class AxonJobProcessor(
 
             try
             {
-                // Claim before dispatch, not after: SendCoreAsync can hand off to a client that
+                // Claim before dispatch, not after: DispatchAsync can hand off to a client that
                 // executes and calls back OnSuccess before this method continues, and if the
                 // claim then landed afterward it would clobber that Succeeded state back to
                 // Processing, permanently stranding an already-completed job.
@@ -123,8 +120,7 @@ public class AxonJobProcessor(
                 }
 
                 await notifier.JobsChanged();
-                await hubContext.Clients.Client(connectionId)
-                    .SendCoreAsync("Invoke", [job.JobId, job], stoppingToken);
+                await dispatcher.DispatchAsync(job, stoppingToken);
             }
             catch (Exception e)
             {

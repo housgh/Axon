@@ -1,0 +1,84 @@
+name: axon-monolith
+
+# 3 instances of one monolith (Axon.Example.Monolith: app + scheduler + job runner in a single
+# process, via AddInProcessClient) sharing a SQL Server job store. Compared to ../multi-instance/docker-compose.yml
+# there is no separate client service, no Redis backplane, and no /hubs/axon WebSocket route.
+#
+# Ports are offset from the multi-instance stack (8180 vs 8080, 1434 vs 1433) so both can run side by side.
+
+x-monolith: &monolith
+  build:
+    context: ../..
+    dockerfile: examples/Axon.Example.Monolith/Dockerfile
+  volumes:
+    - axon-monolith-dataprotection-keys:/keys
+  depends_on:
+    sqlserver:
+      condition: service_healthy
+
+x-monolith-env: &monolith-env
+  ASPNETCORE_URLS: "http://+:8080"
+  Axon__SqlConnectionString: "Server=sqlserver,1433;Database=AxonMonolith;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True"
+  Axon__DataProtectionKeysPath: "/keys"
+  # Deliberately small so a burst of /enqueue-slow jobs visibly spreads across all 3 instances;
+  # the library default is ProcessorCount * 5.
+  Axon__MaxConcurrentJobs: "4"
+  Axon__DashboardUsers__0__Username: "admin"
+  Axon__DashboardUsers__0__Password: "${DASHBOARD_ADMIN_PASSWORD}"
+  Axon__DashboardUsers__0__Role: "Admin"
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${SQL_SA_PASSWORD}"
+    ports:
+      - "1434:1433"
+    volumes:
+      - axon-monolith-sqlserver-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  app1:
+    <<: *monolith
+    environment:
+      <<: *monolith-env
+      Axon__InstanceName: "app1"
+    ports:
+      - "8181:8080"
+
+  app2:
+    <<: *monolith
+    environment:
+      <<: *monolith-env
+      Axon__InstanceName: "app2"
+    ports:
+      - "8182:8080"
+
+  app3:
+    <<: *monolith
+    environment:
+      <<: *monolith-env
+      Axon__InstanceName: "app3"
+    ports:
+      - "8183:8080"
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8180:8080"
+    depends_on:
+      - app1
+      - app2
+      - app3
+
+volumes:
+  axon-monolith-sqlserver-data:
+  axon-monolith-dataprotection-keys:

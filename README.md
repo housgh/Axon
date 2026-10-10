@@ -11,6 +11,8 @@ Axon.Server acts purely as a scheduler/dispatcher — it never executes your job
 - A client only receives jobs while its connection is open; if it disconnects, dispatched-but-unacknowledged jobs are reclaimed and retried (see [docs/architecture.md](docs/architecture.md)) rather than lost.
 - Running `Axon.Server` behind multiple instances requires a backplane (`Axon.Server.Redis`, see below) or sticky sessions, since a client's WebSocket is pinned to whichever server instance accepted it. Dispatch itself is safe across instances sharing `Axon.Store.SqlServer`, `Axon.Store.Postgres`, `Axon.Store.MySql`, or `Axon.Store.MongoDb` — each instance atomically claims a job before dispatching it (see [docs/architecture.md](docs/architecture.md#multi-instance-dispatch-safety)), so at most one instance ever dispatches a given job even if several see it as due in the same poll cycle. The backplane requirement is specifically about routing a client's *inbound* WebSocket traffic to the right instance, not about dispatch correctness.
 
+**Running a monolith instead?** If the code that enqueues jobs and the code that runs them ship as one deployable, you don't need any of that transport: see [Monolith (in-process) mode](#monolith-in-process-mode) — no WebSocket, no client package, no server URL.
+
 ## Packages
 
 NuGet package IDs are prefixed `GoAxon.*` (the `Axon.*` prefix is reserved by another publisher);
@@ -79,6 +81,28 @@ Add `Axon.Server.OpenTelemetry` if you want metrics and traces for job dispatch,
 ```bash
 dotnet add package GoAxon.Server.OpenTelemetry
 ```
+
+## Monolith (in-process) mode
+
+If your app is a single deployable (one codebase that both enqueues and runs its jobs), the SignalR round trip is pure overhead. Chain `.AddInProcessClient()` off `AddAxonServer()` instead of calling `AddAxonClient(...)`, and only install `GoAxon.Server`:
+
+```csharp
+builder.Services.AddAxonServer()
+    .AddAxonDashboard()
+    .AddInProcessClient(); // optional: o => o.MaxConcurrentJobs = 20
+
+var app = builder.Build();
+app.UseAxonServer();
+```
+
+Inject `IAxonClient` exactly as in [step 8](#8-enqueue-schedule-and-run-recurring-jobs) — enqueue, schedule, continuations, recurring jobs, retries, priorities, queues, concurrency limits, and every `Axon.Store.*` backend all work the same. What changes:
+
+- **No WebSocket.** `IAxonClient` writes jobs straight to the job store, and claimed jobs run on this process's thread pool. `UseAxonServer()` doesn't map the `/hubs/axon` job hub at all. (The dashboard's own live-update hub, `/axon/hub`, is unaffected — it's browser-to-server and only exists if you enable the dashboard.)
+- **Any instance runs any job.** Running several copies of the monolith behind a load balancer with a shared durable store (`Axon.Store.SqlServer`/`Postgres`/`MySql`/`MongoDb`) just works: each instance polls, `TryClaimJob` guarantees one instance runs a given job, and no Redis backplane is needed.
+- **Bounded concurrency.** Each instance runs at most `MaxConcurrentJobs` jobs at once (default `Environment.ProcessorCount * 5`); past that, due jobs stay `Enqueued` for the next poll or another instance.
+- **Graceful shutdown.** On shutdown the instance stops taking new jobs and waits for running ones up to the host's shutdown timeout (`HostOptions.ShutdownTimeout`); anything still running after that is retried via [orphan reclaim](docs/architecture.md#orphan-reclaim-crash--disconnect-recovery).
+
+`AddInProcessClient()` and `AddAxonClient(...)` are mutually exclusive in one app — registering both throws at startup. See `examples/Axon.Example.Monolith` for a runnable sample, and [deploy/monolith](deploy/monolith/README.md) for a 3-instance docker compose stack sharing SQL Server.
 
 ## Usage
 
@@ -206,6 +230,8 @@ builder.Services.AddAxonServer()
 `Enqueued`/`Scheduled`/`Processing`/`AwaitingParent` jobs are never touched, regardless of age.
 
 ### 6. Register the client
+
+(Skip this step in [monolith mode](#monolith-in-process-mode) — `.AddInProcessClient()` replaces it.)
 
 Point the client at wherever `Axon.Server` is hosted (its own process, or a different microservice's address). This opens the SignalR/WebSocket connection (`/hubs/axon`) that the server dispatches jobs over:
 
@@ -387,7 +413,7 @@ The dashboard is organized into four tabs:
 
 The dashboard updates in real time over a dedicated SignalR connection (`/axon/hub`, gated by the same dashboard auth) rather than polling: every job, recurring-job, server, or client change is pushed to open dashboard tabs the moment it happens. If that connection is ever unavailable (network blip, outbound access to the SignalR JS CDN blocked, etc.) the dashboard automatically falls back to polling every 5s and keeps retrying the push connection in the background.
 
-See [examples/](examples) for complete, runnable ASP.NET Core projects ([Axon.Example.Server](examples/Axon.Example.Server), [Axon.Example.Client](examples/Axon.Example.Client)) wired up end-to-end, and [deploy/](deploy) for a docker compose stack that runs 3 `Axon.Server` instances behind a load balancer, sharing SQL Server and a Redis backplane, with a separate client - a real horizontally-scaled deployment running with one command.
+See [examples/](examples) for complete, runnable ASP.NET Core projects ([Axon.Example.Server](examples/Axon.Example.Server), [Axon.Example.Client](examples/Axon.Example.Client)) wired up end-to-end, and [deploy/multi-instance](deploy/multi-instance/README.md) for a docker compose stack that runs 3 `Axon.Server` instances behind a load balancer, sharing SQL Server and a Redis backplane, with a separate client - a real horizontally-scaled deployment running with one command.
 
 ## Architecture
 

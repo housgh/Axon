@@ -1,7 +1,4 @@
 using System.Linq.Expressions;
-using Axon.Core;
-using Axon.Core.Enums;
-using Axon.Core.Helpers;
 using Axon.Core.Models;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
@@ -95,37 +92,38 @@ internal class AxonClient : IAxonClient
 
     private readonly HubConnection _hubConnection;
     private readonly ILogger<AxonClient> _logger;
+    private readonly AxonJobExecutor _executor = new();
     private readonly string _deviceName;
 
     public Task<string> EnqueueAsync(Expression<Action> methodCall, AxonEnqueueOptions? options = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, options), null, options?.CancellationToken ?? default);
+        EnqueueInternalAsync(JobInfoFactory.Create(methodCall, options), null, options?.CancellationToken ?? default);
 
     public Task<string> EnqueueAsync<TType>(Expression<Action<TType>> methodCall, AxonEnqueueOptions? options = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, options), null, options?.CancellationToken ?? default);
+        EnqueueInternalAsync(JobInfoFactory.Create(methodCall, options), null, options?.CancellationToken ?? default);
 
     public Task<string> ScheduleAsync(TimeSpan delay, Expression<Action> methodCall, AxonEnqueueOptions? options = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, options), DateTimeOffset.UtcNow.Add(delay), options?.CancellationToken ?? default);
+        EnqueueInternalAsync(JobInfoFactory.Create(methodCall, options), DateTimeOffset.UtcNow.Add(delay), options?.CancellationToken ?? default);
 
     public Task<string> ScheduleAsync<TType>(TimeSpan delay, Expression<Action<TType>> methodCall, AxonEnqueueOptions? options = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, options), DateTimeOffset.UtcNow.Add(delay), options?.CancellationToken ?? default);
+        EnqueueInternalAsync(JobInfoFactory.Create(methodCall, options), DateTimeOffset.UtcNow.Add(delay), options?.CancellationToken ?? default);
 
     public Task<string> ScheduleAsync(DateTimeOffset scheduledFor, Expression<Action> methodCall, AxonEnqueueOptions? options = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, options), scheduledFor, options?.CancellationToken ?? default);
+        EnqueueInternalAsync(JobInfoFactory.Create(methodCall, options), scheduledFor, options?.CancellationToken ?? default);
 
     public Task<string> ScheduleAsync<TType>(DateTimeOffset scheduledFor, Expression<Action<TType>> methodCall, AxonEnqueueOptions? options = null) =>
-        EnqueueInternalAsync(GetJobInfo(methodCall, options), scheduledFor, options?.CancellationToken ?? default);
+        EnqueueInternalAsync(JobInfoFactory.Create(methodCall, options), scheduledFor, options?.CancellationToken ?? default);
 
     public Task<string> ContinueWithAsync(string parentJobId, Expression<Action> methodCall, bool continueOnParentFailure = false, AxonEnqueueOptions? options = null) =>
-        ContinueWithInternalAsync(parentJobId, GetJobInfo(methodCall, options), continueOnParentFailure, options?.CancellationToken ?? default);
+        ContinueWithInternalAsync(parentJobId, JobInfoFactory.Create(methodCall, options), continueOnParentFailure, options?.CancellationToken ?? default);
 
     public Task<string> ContinueWithAsync<TType>(string parentJobId, Expression<Action<TType>> methodCall, bool continueOnParentFailure = false, AxonEnqueueOptions? options = null) =>
-        ContinueWithInternalAsync(parentJobId, GetJobInfo(methodCall, options), continueOnParentFailure, options?.CancellationToken ?? default);
+        ContinueWithInternalAsync(parentJobId, JobInfoFactory.Create(methodCall, options), continueOnParentFailure, options?.CancellationToken ?? default);
 
     public Task AddOrUpdateRecurringAsync(string recurringJobId, string cronExpression, Expression<Action> methodCall, CancellationToken cancellationToken = default) =>
-        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null), cancellationToken);
+        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, JobInfoFactory.Create(methodCall, null), cancellationToken);
 
     public Task AddOrUpdateRecurringAsync<TType>(string recurringJobId, string cronExpression, Expression<Action<TType>> methodCall, CancellationToken cancellationToken = default) =>
-        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, GetJobInfo(methodCall, null), cancellationToken);
+        AddOrUpdateRecurringInternalAsync(recurringJobId, cronExpression, JobInfoFactory.Create(methodCall, null), cancellationToken);
 
     public Task RemoveRecurringAsync(string recurringJobId, CancellationToken cancellationToken = default) =>
         _hubConnection.InvokeCoreAsync("RemoveRecurring", [recurringJobId], cancellationToken);
@@ -160,81 +158,16 @@ internal class AxonClient : IAxonClient
         return jobId;
     }
 
-    // internal (not private) so Axon.Tests.Unit can verify the concurrency key/attribute
-    // precedence logic directly, without needing a real or faked HubConnection.
-    internal static JobInfo? GetJobInfo(LambdaExpression methodCall, AxonEnqueueOptions? options)
-    {
-        if (methodCall.Body is not MethodCallExpression call) return null;
-
-        var concurrencyKey = options?.ConcurrencyKey;
-        var maxConcurrent = options?.MaxConcurrent;
-
-        // An explicit concurrencyKey argument always wins over the attribute; the attribute is
-        // only consulted when the caller didn't pass one, so a call-site override never has to
-        // fight a method-level default.
-        if (concurrencyKey is null)
-        {
-            var limit = call.Method.GetCustomAttributes(typeof(AxonConcurrencyLimitAttribute), inherit: false)
-                .Cast<AxonConcurrencyLimitAttribute>()
-                .FirstOrDefault();
-            if (limit is not null)
-            {
-                concurrencyKey = limit.ConcurrencyKey;
-                maxConcurrent = limit.MaxConcurrent;
-            }
-        }
-
-        return new JobInfo
-        {
-            Arguments = GetArguments(call),
-            Assembly = call.Method.DeclaringType!.Assembly.FullName!,
-            MethodName = call.Method.Name,
-            DeclaringType = call.Method.DeclaringType!.FullName!,
-            RetryPolicy = options?.RetryPolicy,
-            ConcurrencyKey = concurrencyKey,
-            MaxConcurrent = maxConcurrent,
-            Priority = options?.Priority ?? JobPriority.Medium,
-            QueueName = options?.QueueName ?? "default",
-        };
-    }
-
-    private static List<object?> GetArguments(MethodCallExpression call)
-    {
-        return call.Arguments
-            .Select(arg => Expression.Lambda(arg).Compile().DynamicInvoke()).ToList();
-    }
-
     private async void OnInvoke(string jobId, JobInfo jobInfo)
     {
-        ActivatedJob activated = default;
-        try
+        var result = await _executor.ExecuteAsync(jobInfo);
+        if (result.Succeeded)
         {
-            activated = JobActivator.Current.CreateInstance(jobInfo);
-            var methodInfo = activated.Instance?.GetType().GetMethod(jobInfo.MethodName);
-            if (methodInfo is null)
-            {
-                await _hubConnection.InvokeAsync("OnFail", jobId, $"Could not find method: {jobInfo.MethodName}");
-                return;
-            }
-
-            var arguments = JsonElementHelper.ToObjectArray(jobInfo.Arguments.ToArray());
-            methodInfo.Invoke(activated.Instance, arguments);
             await _hubConnection.InvokeAsync("OnSuccess", jobId);
         }
-        catch (FileNotFoundException)
+        else
         {
-            await _hubConnection.InvokeAsync("OnFail", jobId, $"Could not load assembly: {jobInfo.Assembly}");
-        }
-        catch (Exception e)
-        {
-            await _hubConnection.InvokeAsync("OnFail", jobId, e.ToString());
-        }
-        finally
-        {
-            // Disposed only now - after the job method has actually run, not right after
-            // activation - so a scoped dependency (e.g. ServiceProviderJobActivator's DI scope)
-            // injected into the job's constructor stays alive for the whole call.
-            activated.Scope?.Dispose();
+            await _hubConnection.InvokeAsync("OnFail", jobId, result.Error);
         }
     }
 }

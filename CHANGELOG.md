@@ -8,6 +8,15 @@ in this repo is released together under one version, from a `vX.Y.Z` git tag.
 ## [Unreleased]
 
 ### Added
+- Monolith (in-process) mode: `AddAxonServer().AddInProcessClient()` lets a single deployable
+  enqueue and run its own jobs with no SignalR/WebSocket connection, no `AddAxonClient(url)`, and
+  no `/hubs/axon` endpoint. Jobs run on the host's thread pool (bounded by
+  `AxonInProcessClientOptions.MaxConcurrentJobs`), in-flight jobs are drained on shutdown, and
+  every instance of a scaled-out monolith can run any job. See README.md#monolith-in-process-mode
+  and `examples/Axon.Example.Monolith`.
+- `IAxonJobDispatcher` (Axon.Server), `AxonJobExecutor` and `JobInfoFactory` (Axon.Client): the
+  dispatch/execute/job-building seams shared by both modes. `GoAxon.Server` now depends on
+  `GoAxon.Client`.
 - `Axon.Store.Postgres`: PostgreSQL-backed job storage for `Axon.Server`, mirroring
   `Axon.Store.SqlServer`'s feature set (same four store interfaces, same `Schema.sql`-first
   onboarding, same multi-instance dispatch safety guarantee - see

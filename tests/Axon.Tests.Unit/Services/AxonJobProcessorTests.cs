@@ -29,10 +29,9 @@ public class AxonJobProcessorTests
         _hubClients.Client(Arg.Any<string>()).Returns(_clientProxy);
 
         _sut = new AxonJobProcessor(
-            _hubContext,
+            new SignalRJobDispatcher(_hubContext, _deviceRegistry),
             _jobStore,
             _jobService,
-            _deviceRegistry,
             _notifier,
             Substitute.For<ILogger<AxonJobProcessor>>());
     }
@@ -69,7 +68,7 @@ public class AxonJobProcessorTests
         // The device is connected (so the existing connectivity check alone wouldn't skip it) -
         // only the queue guard should stop this dispatch.
         var sut = new AxonJobProcessor(
-            _hubContext, _jobStore, _jobService, _deviceRegistry, _notifier,
+            new SignalRJobDispatcher(_hubContext, _deviceRegistry), _jobStore, _jobService, _notifier,
             Substitute.For<ILogger<AxonJobProcessor>>(),
             new AxonServerFeatures { ServedQueues = new HashSet<string> { "default" } });
         await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued, queueName: "billing"));
@@ -86,7 +85,7 @@ public class AxonJobProcessorTests
     public async Task DispatchDueJobsAsync_JobOnServedQueue_DispatchesNormally()
     {
         var sut = new AxonJobProcessor(
-            _hubContext, _jobStore, _jobService, _deviceRegistry, _notifier,
+            new SignalRJobDispatcher(_hubContext, _deviceRegistry), _jobStore, _jobService, _notifier,
             Substitute.For<ILogger<AxonJobProcessor>>(),
             new AxonServerFeatures { ServedQueues = new HashSet<string> { "default", "billing" } });
         await _jobStore.AddJob(JobFactory.CreateJob("job-1", deviceName: "device-1", state: JobState.Enqueued, queueName: "billing"));
@@ -191,7 +190,7 @@ public class AxonJobProcessorTests
         jobStore.TryClaimJob(Arg.Any<string>(), Arg.Any<long>(), Arg.Any<string?>()).Returns(false);
         jobStore.GetOrphanedProcessingJobs(Arg.Any<long>()).Returns([]);
         await _deviceRegistry.Register("device-1", "conn-1");
-        var sut = new AxonJobProcessor(_hubContext, jobStore, _jobService, _deviceRegistry, _notifier, Substitute.For<ILogger<AxonJobProcessor>>());
+        var sut = new AxonJobProcessor(new SignalRJobDispatcher(_hubContext, _deviceRegistry), jobStore, _jobService, _notifier, Substitute.For<ILogger<AxonJobProcessor>>());
         var method = typeof(AxonJobProcessor).GetMethod("DispatchDueJobsAsync",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
 

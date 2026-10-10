@@ -17,7 +17,7 @@ builder.Services.AddScoped<ISampleService, SampleService>();
 var app = builder.Build();
 
 // Always on, not just in Development: this is a demo project run via docker-compose (see
-// deploy/docker-compose.yml), where ASPNETCORE_ENVIRONMENT is Production by default - gating
+// deploy/multi-instance/docker-compose.yml), where ASPNETCORE_ENVIRONMENT is Production by default - gating
 // Swagger to Development would silently hide it in that setup, the main way this project runs.
 app.UseSwagger();
 app.UseSwaggerUI();

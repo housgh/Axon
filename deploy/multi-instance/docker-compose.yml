@@ -29,7 +29,7 @@ services:
 
   server1:
     build:
-      context: ..
+      context: ../..
       dockerfile: examples/Axon.Example.Server/Dockerfile
     environment:
       ASPNETCORE_URLS: "http://+:8080"
@@ -49,7 +49,7 @@ services:
 
   server2:
     build:
-      context: ..
+      context: ../..
       dockerfile: examples/Axon.Example.Server/Dockerfile
     environment:
       ASPNETCORE_URLS: "http://+:8080"
@@ -69,7 +69,7 @@ services:
 
   server3:
     build:
-      context: ..
+      context: ../..
       dockerfile: examples/Axon.Example.Server/Dockerfile
     environment:
       ASPNETCORE_URLS: "http://+:8080"
@@ -100,7 +100,7 @@ services:
 
   client:
     build:
-      context: ..
+      context: ../..
       dockerfile: examples/Axon.Example.Client/Dockerfile
     environment:
       ASPNETCORE_URLS: "http://+:8080"

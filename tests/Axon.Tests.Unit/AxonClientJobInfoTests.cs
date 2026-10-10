@@ -22,7 +22,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, options: null);
+        var jobInfo = JobInfoFactory.Create(call, options: null);
 
         jobInfo!.ConcurrencyKey.Should().BeNull();
         jobInfo.MaxConcurrent.Should().BeNull();
@@ -33,7 +33,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { ConcurrencyKey = "explicit-key", MaxConcurrent = 3 });
+        var jobInfo = JobInfoFactory.Create(call, new AxonEnqueueOptions { ConcurrencyKey = "explicit-key", MaxConcurrent = 3 });
 
         jobInfo!.ConcurrencyKey.Should().Be("explicit-key");
         jobInfo.MaxConcurrent.Should().Be(3);
@@ -44,7 +44,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.LimitedMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, options: null);
+        var jobInfo = JobInfoFactory.Create(call, options: null);
 
         jobInfo!.ConcurrencyKey.Should().Be("email-sender");
         jobInfo.MaxConcurrent.Should().Be(5);
@@ -55,7 +55,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.LimitedMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { ConcurrencyKey = "override-key", MaxConcurrent = 99 });
+        var jobInfo = JobInfoFactory.Create(call, new AxonEnqueueOptions { ConcurrencyKey = "override-key", MaxConcurrent = 99 });
 
         jobInfo!.ConcurrencyKey.Should().Be("override-key");
         jobInfo.MaxConcurrent.Should().Be(99);
@@ -66,7 +66,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, options: null);
+        var jobInfo = JobInfoFactory.Create(call, options: null);
 
         jobInfo!.Priority.Should().Be(JobPriority.Medium);
     }
@@ -76,7 +76,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { Priority = JobPriority.Critical });
+        var jobInfo = JobInfoFactory.Create(call, new AxonEnqueueOptions { Priority = JobPriority.Critical });
 
         jobInfo!.Priority.Should().Be(JobPriority.Critical);
     }
@@ -86,7 +86,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, options: null);
+        var jobInfo = JobInfoFactory.Create(call, options: null);
 
         jobInfo!.QueueName.Should().Be("default");
     }
@@ -96,7 +96,7 @@ public class AxonClientJobInfoTests
     {
         Expression<Action<TestJobs>> call = x => x.PlainMethod();
 
-        var jobInfo = AxonClient.GetJobInfo(call, new AxonEnqueueOptions { QueueName = "billing" });
+        var jobInfo = JobInfoFactory.Create(call, new AxonEnqueueOptions { QueueName = "billing" });
 
         jobInfo!.QueueName.Should().Be("billing");
     }

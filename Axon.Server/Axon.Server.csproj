@@ -17,6 +17,9 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Axon.Core\Axon.Core.csproj" />
+      <!-- For monolith mode (AddInProcessClient): reuses Axon.Client's IAxonClient contract, job
+           expression parsing, and job executor so in-process jobs behave like dispatched ones. -->
+      <ProjectReference Include="..\Axon.Client\Axon.Client.csproj" />
     </ItemGroup>
 
     <ItemGroup>
